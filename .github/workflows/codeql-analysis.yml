@@ -38,9 +38,10 @@ jobs:
     - if: matrix.build-mode == 'manual'
       shell: bash
       run: |
-        sudo apt-get -y install build-essential libssl-dev libexpat-dev libpcre3-dev libapr1-dev libaprutil1-dev autoconf libtool libapr1 libaprutil1
+        sudo apt-get -y install build-essential libssl-dev libexpat-dev libpcre3-dev libapr1-dev libaprutil1-dev autoconf libtool libapr1 
+        svn co http://svn.apache.org/repos/asf/apr/apr/trunk srclib/apr
         ./buildconf
-        ./configure
+        ./configure --with-included-apr
         make
     - name: Free disk space
       run: |
