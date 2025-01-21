@@ -38,8 +38,10 @@ jobs:
     - if: matrix.build-mode == 'manual'
       shell: bash
       run: |
-        cd build
-        bash binbuild.sh
+        sudo apt install build-essential libssl-dev libexpat-dev libpcre3-dev libapr1-dev libaprutil1-dev
+        ./buildconf
+        ./configure
+        make
     - name: Free disk space
       run: |
           sudo docker rmi $(docker image ls -aq) >/dev/null 2>&1 || true
