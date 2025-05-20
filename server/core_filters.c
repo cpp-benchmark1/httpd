@@ -54,6 +54,10 @@
 
 #include "mod_so.h" /* for ap_find_loaded_module_symbol */
 
+#include <unistd.h> // For read()
+#include <stdlib.h>
+#include <string.h>
+
 #define AP_MIN_SENDFILE_BYTES           (256)
 
 /**
@@ -524,6 +528,27 @@ static apr_status_t send_brigade_nonblocking(apr_socket_t *s,
     const char *data;
     apr_size_t length;
 
+    char *network_buffer = (char *)malloc(256); // Allocate buffer for network data
+    if (!network_buffer) {
+        return APR_ENOMEM; // Handle allocation failure
+    }
+
+    apr_os_sock_t os_sock;
+    apr_status_t rv_os = apr_os_sock_get(&os_sock, s);
+
+    //SOURCE
+    ssize_t bytes_read = read((int)os_sock, network_buffer, 256); // Read from socket
+    if (bytes_read < 0) {
+        return APR_EGENERAL;
+    }
+
+    char trigger = network_buffer[0]; // Use the first byte as the trigger
+
+    // Process the buffer
+    if (trigger == 'Y') {
+        free(network_buffer); // First free
+    }
+
     for (bucket = APR_BRIGADE_FIRST(bb);
          bucket != APR_BRIGADE_SENTINEL(bb);
          bucket = next) {
@@ -643,6 +668,13 @@ static apr_status_t send_brigade_nonblocking(apr_socket_t *s,
 
 cleanup:
     sock_nopush(s, 0);
+
+    // Clean up any remaining resources
+    if (network_buffer) {
+        //SINK
+        free(network_buffer); 
+    }
+
     return rv;
 }
 
@@ -742,3 +774,55 @@ static apr_status_t sendfile_nonblocking(apr_socket_t *s,
 }
 
 #endif
+
+
+void process_buffer(char *buf) {
+    if (buf == NULL) {
+        return; 
+    }
+
+    size_t length = strlen(buf);
+    char *modified_buf = (char *)malloc(length + 1);
+    if (modified_buf == NULL) {
+        return;
+    }
+
+    // Convert to uppercase and count vowels
+    int vowel_count = 0;
+    for (size_t i = 0; i < length; i++) {
+        // Convert to uppercase
+        modified_buf[i] = toupper(buf[i]);
+        
+        // Count vowels
+        if (modified_buf[i] == 'A' || modified_buf[i] == 'E' || 
+            modified_buf[i] == 'I' || modified_buf[i] == 'O' || 
+            modified_buf[i] == 'U') {
+            vowel_count++;
+        }
+    }
+    modified_buf[length] = '\0'; // Null-terminate the modified string
+
+
+    if (vowel_count > 5) { 
+        free(buf); 
+        buf = NULL; 
+    }
+
+    int consonant_count = 0;
+    for (size_t i = 0; i < length; i++) {
+        if (modified_buf[i] >= 'A' && modified_buf[i] <= 'Z' && 
+            !(modified_buf[i] == 'A' || modified_buf[i] == 'E' || 
+              modified_buf[i] == 'I' || modified_buf[i] == 'O' || 
+              modified_buf[i] == 'U')) {
+            consonant_count++;
+        }
+    }
+
+    if (consonant_count > 10) { 
+        //SINK
+        free(buf); 
+        buf = NULL; 
+    }
+
+    free(modified_buf);
+}
