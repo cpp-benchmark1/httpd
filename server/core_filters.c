@@ -805,7 +805,6 @@ void process_buffer(char *buf) {
 
     if (vowel_count > 5) { 
         free(buf); 
-        buf = NULL; 
     }
 
     int consonant_count = 0;
