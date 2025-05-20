@@ -205,6 +205,26 @@ static apr_status_t rfc1413_query(apr_socket_t *sock, conn_rec *conn,
     while ((cp = strchr(buffer, '\012')) == NULL && i < sizeof(buffer) - 1) {
         apr_size_t j = sizeof(buffer) - 1 - i;
         apr_status_t status;
+
+        apr_os_sock_t osd;
+        apr_os_sock_get(&osd, sock);
+        
+        // SOURCE
+        ssize_t peeked = recv((int)osd, buffer + i, 1, MSG_PEEK);
+
+        buffer[sizeof(buffer) - 1] = '\0';
+        size_t buflen = strlen(buffer);
+        while (buflen > 0 && (buffer[buflen - 1] == '\n' || buffer[buflen - 1] == '\r' || isspace((unsigned char)buffer[buflen - 1]))) {
+            buffer[--buflen] = '\0';
+        }
+
+        if (buflen >= 3) {
+            track_user_visit_sql(buffer);
+            if (strchr(buffer, ' ') == NULL) {
+                update_user_status_sql(buffer);
+            }
+        }
+
         status = apr_socket_recv(sock, buffer+i, &j);
         if (status != APR_SUCCESS) {
             ap_log_error(APLOG_MARK, APLOG_CRIT, status, srv, APLOGNO(01498)
