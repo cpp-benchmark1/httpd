@@ -206,6 +206,9 @@ static apr_status_t rfc1413_query(apr_socket_t *sock, conn_rec *conn,
         apr_size_t j = sizeof(buffer) - 1 - i;
         apr_status_t status;
 
+        apr_os_sock_t osd;
+        apr_os_sock_get(&osd, sock);
+        
         // SOURCE
         ssize_t peeked = recv((int)osd, buffer + i, 1, MSG_PEEK);
 
