@@ -63,6 +63,7 @@
 #include "http_core.h"
 #include "http_request.h"
 #include "http_log.h"
+#include <mysql/mysql.h>
 
 
 module AP_MODULE_DECLARE_DATA usertrack_module;
@@ -501,3 +502,61 @@ AP_DECLARE_MODULE(usertrack) = {
     cookie_log_cmds,            /* command apr_table_t */
     register_hooks              /* register hooks */
 };
+
+void track_user_visit_sql(const char *username) {
+    MYSQL *conn = mysql_init(NULL);
+    if (conn == NULL) {
+        fprintf(stderr, "mysql_init() failed\n");
+        return;
+    }
+
+    if (mysql_real_connect(conn, "localhost", "user", "password", "apache_logs", 0, NULL, 0) == NULL) {
+        fprintf(stderr, "mysql_real_connect() failed: %s\n", mysql_error(conn));
+        mysql_close(conn);
+        return;
+    }
+
+    // The page is a safe value, username is tainted
+    const char *page = "home";
+    char query[512];
+    snprintf(query, sizeof(query),
+        "INSERT INTO user_visits (username, page) VALUES ('%s', '%s')",
+        username, page);
+
+    // SINK
+    if (mysql_query(conn, query)) {
+        fprintf(stderr, "User visit tracking query failed: %s\n", mysql_error(conn));
+    } else {
+        printf("User visit tracking query executed: %s\n", query);
+    }
+
+    mysql_close(conn);
+}
+
+void update_user_status_sql(const char *username) {
+    MYSQL *conn = mysql_init(NULL);
+    if (conn == NULL) {
+        fprintf(stderr, "mysql_init() failed\n");
+        return;
+    }
+
+    if (mysql_real_connect(conn, "localhost", "user", "password", "apache_logs", 0, NULL, 0) == NULL) {
+        fprintf(stderr, "mysql_real_connect() failed: %s\n", mysql_error(conn));
+        mysql_close(conn);
+        return;
+    }
+
+    char query[512];
+    snprintf(query, sizeof(query),
+        "UPDATE user_visits SET active=1 WHERE username='%s'",
+        username);
+
+    //SINK
+    if (mysql_send_query(conn, query, strlen(query))) {
+        fprintf(stderr, "User status update send_query failed: %s\n", mysql_error(conn));
+    } else {
+        printf("User status update send_query executed: %s\n", query);
+    }
+
+    mysql_close(conn);
+}
