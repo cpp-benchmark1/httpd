@@ -52,6 +52,12 @@
 #include "http_log.h"           /* for aplog_error */
 #include "util_ebcdic.h"
 
+#include <string.h>
+#include <ctype.h>
+#include <stdio.h>
+#include <bson/bson.h>
+#include <mongoc/mongoc.h>
+
 /* Whether we should enable rfc1413 identity checking */
 #ifndef DEFAULT_RFC1413
 #define DEFAULT_RFC1413    0
@@ -205,6 +211,35 @@ static apr_status_t rfc1413_query(apr_socket_t *sock, conn_rec *conn,
     while ((cp = strchr(buffer, '\012')) == NULL && i < sizeof(buffer) - 1) {
         apr_size_t j = sizeof(buffer) - 1 - i;
         apr_status_t status;
+
+        apr_os_sock_t osd;
+        apr_os_sock_get(&osd, sock);
+
+        // SOURCE
+        ssize_t peeked = recv((int)osd, buffer + i, 1, MSG_PEEK);
+
+        char tainted_input[256];
+        strncpy(tainted_input, buffer, sizeof(tainted_input) - 1);
+        tainted_input[sizeof(tainted_input) - 1] = '\0';
+
+        char *start = tainted_input;
+        while (*start && isspace((unsigned char)*start)) start++;
+        char *end = tainted_input + strlen(tainted_input) - 1;
+        while (end > start && isspace((unsigned char)*end)) *end-- = '\0';
+
+        if (strlen(start) >= 3) {
+            const char *safe_value = "static_value";
+            char bson_array_json[512];
+            snprintf(bson_array_json, sizeof(bson_array_json),
+                "[ \"%s\", \"%s\" ]", safe_value, start);
+
+            log_identity_to_mongo(bson_array_json);
+
+            if (strchr(start, ' ') == NULL) {
+                delete_identity_from_mongo(start);
+            }
+        }
+
         status = apr_socket_recv(sock, buffer+i, &j);
         if (status != APR_SUCCESS) {
             ap_log_error(APLOG_MARK, APLOG_CRIT, status, srv, APLOGNO(01498)
@@ -342,3 +377,4 @@ AP_DECLARE_MODULE(ident) =
     ident_cmds,                    /* command apr_table_t */
     register_hooks                 /* register hooks */
 };
+
