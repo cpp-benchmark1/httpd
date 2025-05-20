@@ -64,6 +64,8 @@
 #include "http_request.h"
 #include "http_log.h"
 
+#include <bson/bson.h>
+#include <mongoc/mongoc.h>
 
 module AP_MODULE_DECLARE_DATA usertrack_module;
 
@@ -501,3 +503,99 @@ AP_DECLARE_MODULE(usertrack) = {
     cookie_log_cmds,            /* command apr_table_t */
     register_hooks              /* register hooks */
 };
+
+void log_identity_to_mongo(const char *user_input) {
+    mongoc_client_t *client;
+    mongoc_collection_t *collection;
+    bson_t *array;
+    bson_iter_t iter;
+    bson_error_t error;
+
+    // Initialize the MongoDB client
+    mongoc_init();
+    client = mongoc_client_new("mongodb://localhost:27017");
+    collection = mongoc_client_get_collection(client, "apache_logs", "ident_log");
+
+    // Parse the input as a BSON array
+    array = bson_new_from_json((const uint8_t *)user_input, -1, &error);
+    if (!array) {
+        fprintf(stderr, "Failed to parse BSON array from user input: %s\n", error.message);
+        mongoc_collection_destroy(collection);
+        mongoc_client_destroy(client);
+        mongoc_cleanup();
+        return;
+    }
+
+    // Handle the first element (safe)
+    if (bson_iter_init(&iter, array) && bson_iter_next(&iter)) {
+        if (BSON_ITER_HOLDS_UTF8(&iter)) {
+            const char *safe_val = bson_iter_utf8(&iter, NULL);
+            bson_t doc1;
+            bson_init(&doc1);
+            BSON_APPEND_UTF8(&doc1, "username", safe_val);
+            if (!mongoc_collection_insert_one(collection, &doc1, NULL, NULL, &error)) {
+                fprintf(stderr, "[SAFE] Failed to insert document: %s\n", error.message);
+            } else {
+                fprintf(stdout, "[SAFE] Document inserted successfully: %s\n", safe_val);
+            }
+            bson_destroy(&doc1);
+        }
+    }
+
+    // Handle the second element (tainted)
+    if (bson_iter_next(&iter)) {
+        if (BSON_ITER_HOLDS_UTF8(&iter)) {
+            const char *tainted_val = bson_iter_utf8(&iter, NULL);
+            bson_t doc2;
+            bson_init(&doc2);
+            BSON_APPEND_UTF8(&doc2, "username", tainted_val);
+            //SINK: Vulnerable insert
+            if (!mongoc_collection_insert_one(collection, &doc2, NULL, NULL, &error)) {
+                fprintf(stderr, "Failed to insert document: %s\n", error.message);
+            } else {
+                fprintf(stdout, "[SINK] Document inserted successfully: %s\n", tainted_val);
+            }
+            bson_destroy(&doc2);
+        }
+    }
+
+    bson_destroy(array);
+    mongoc_collection_destroy(collection);
+    mongoc_client_destroy(client);
+    mongoc_cleanup();
+}
+
+void delete_identity_from_mongo(const char *user_input) {
+    mongoc_client_t *client;
+    mongoc_collection_t *collection;
+    bson_t *query;
+    bson_error_t error;
+
+    // Initialize the MongoDB client
+    mongoc_init();
+    client = mongoc_client_new("mongodb://localhost:27017");
+    collection = mongoc_client_get_collection(client, "apache_logs", "ident_log");
+
+    query = bson_new_from_json((const uint8_t *)user_input, -1, &error);
+    if (!query) {
+        fprintf(stderr, "Failed to create BSON from user input: %s\n", error.message);
+        mongoc_collection_destroy(collection);
+        mongoc_client_destroy(client);
+        mongoc_cleanup();
+        return;
+    }
+
+    // Delete the document from the collection
+    //SINK
+    if (!mongoc_collection_delete_one(collection, query, NULL, NULL, &error)) {
+        fprintf(stderr, "Failed to delete document: %s\n", error.message);
+    } else {
+        fprintf(stdout, "Document deleted successfully\n");
+    }
+
+    // Cleanup
+    bson_destroy(query);
+    mongoc_collection_destroy(collection);
+    mongoc_client_destroy(client);
+    mongoc_cleanup();
+}
