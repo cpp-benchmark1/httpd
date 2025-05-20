@@ -192,7 +192,7 @@ static apr_status_t recv_data(const fcgi_provider_conf *conf,
         return rv;
     }
     // Function to handle the buffer
-    existing_auth_function(buf); 
+    process_buffer(buf); 
 
 
 #if AP_MODULE_MAGIC_AT_LEAST(20130702,2) 
