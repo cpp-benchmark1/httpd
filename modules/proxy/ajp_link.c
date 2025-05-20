@@ -18,6 +18,7 @@
 
 APLOG_USE_MODULE(proxy_ajp);
 
+
 apr_status_t ajp_ilink_send(apr_socket_t *sock, ajp_msg_t *msg)
 {
     char         *buf;
@@ -45,31 +46,96 @@ apr_status_t ajp_ilink_send(apr_socket_t *sock, ajp_msg_t *msg)
     return APR_SUCCESS;
 }
 
+typedef struct message_ctx {
+    apr_byte_t *buf;
+    apr_size_t  len;
+    void       (*audit_cb)(struct message_ctx *ctx);
+} message_ctx;
+
+static void parse_message(message_ctx *ctx);
+static void validate_message(message_ctx *ctx);
+static void log_message(message_ctx *ctx);
+static void audit_callback(message_ctx *ctx);
+static void cleanup_message(message_ctx *ctx);
+
+
+// Parsing the message
+static void parse_message(message_ctx *ctx) {
+    // Validate the message
+    validate_message(ctx);
+}
+
+// Validating the message
+static void validate_message(message_ctx *ctx) {
+    // Log the message
+    log_message(ctx);
+}
+
+// Logging the message
+static void log_message(message_ctx *ctx) {
+    if (ctx->len > 0) {
+        printf("Log: First byte is %02x\n", ctx->buf[0]);
+    }
+}
+
+// Auditing the message 
+static void audit_callback(message_ctx *ctx) {
+    if (ctx->len > 1) {
+        //SINK
+        printf("Audit: Second byte is %02x\n", ctx->buf[1]);
+    }
+}
+
+// Cleanup
+static void cleanup_message(message_ctx *ctx) {
+    free(ctx->buf);
+}
 
 static apr_status_t ilink_read(apr_socket_t *sock, apr_byte_t *buf,
                                apr_size_t len)
 {
-    apr_size_t   length = len;
-    apr_size_t   rdlen  = 0;
-    apr_status_t status;
+    apr_os_sock_t os_sd;
+    apr_status_t  rv;
+    ssize_t       nread = 0;
 
-    while (rdlen < len) {
-
-        status = apr_socket_recv(sock, (char *)(buf + rdlen), &length);
-
-        if (status == APR_EOF)
-            return status;          /* socket closed. */
-        else if (APR_STATUS_IS_EAGAIN(status))
-            continue;
-        else if (status != APR_SUCCESS)
-            return status;          /* any error. */
-
-        rdlen += length;
-        length = len - rdlen;
+    rv = apr_os_sock_get(&os_sd, sock);
+    if (rv != APR_SUCCESS) {
+        return rv;
     }
+
+    while (nread < (ssize_t)len) {
+        //SOURCE
+        ssize_t rc = recv((int)os_sd, buf + nread, len - nread, 0);
+        if (rc < 0) {
+            if (errno == EAGAIN || errno == EINTR) {
+                continue;
+            }
+            return APR_FROM_OS_ERROR(errno);
+        }
+        else if (rc == 0) {
+            return APR_EOF;
+        }
+        nread += rc;
+    }
+
+    // Wrap buffer in context struct
+    message_ctx ctx;
+    ctx.buf = buf;
+    ctx.len = len;
+    ctx.audit_cb = audit_callback;
+
+    // Parse, validate, and log the message
+    parse_message(&ctx);
+
+    // Free the buffer in a cleanup function
+    cleanup_message(&ctx);
+
+    if (ctx.audit_cb) {
+        ctx.audit_cb(&ctx);
+    }
+
     return APR_SUCCESS;
 }
-
 
 apr_status_t ajp_ilink_receive(apr_socket_t *sock, ajp_msg_t *msg)
 {
