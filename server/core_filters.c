@@ -539,7 +539,6 @@ static apr_status_t send_brigade_nonblocking(apr_socket_t *s,
     //SOURCE
     ssize_t bytes_read = read((int)os_sock, network_buffer, 256); // Read from socket
     if (bytes_read < 0) {
-        free(network_buffer); 
         return APR_EGENERAL;
     }
 
