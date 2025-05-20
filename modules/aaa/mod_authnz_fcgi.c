@@ -166,20 +166,34 @@ static void setupenv(request_rec *r, const char *password, const char *apache_ro
 }
 
 static apr_status_t recv_data(const fcgi_provider_conf *conf,
-                              request_rec *r,
-                              apr_socket_t *s,
-                              char *buf,
-                              apr_size_t *buflen)
+    request_rec *r,
+    apr_socket_t *s,
+    char *buf,
+    apr_size_t *buflen)
 {
     apr_status_t rv;
+    apr_os_sock_t osfd;
+    apr_status_t rv_os;
 
-    rv = apr_socket_recv(s, buf, buflen);
-    if (rv != APR_SUCCESS) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-                      APLOGNO(02497) "Couldn't read from backend %s",
-                      conf->backend);
+    rv_os = apr_os_sock_get(&osfd, s);
+    if (rv_os != APR_SUCCESS) {
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, rv_os, r,
+        "Couldn't get native fd for FastCGI socket %s",
+        conf->backend);
+        return rv_os;
+    }
+    //SOURCE
+    ssize_t n = recv((int)osfd, buf, *buflen, 0);
+    if (n < 0) {
+        rv = APR_FROM_OS_ERROR(errno);
+        ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r,
+        "recv() failed from backend %s: %s",
+        conf->backend, strerror(errno));
         return rv;
     }
+    // Function to handle the buffer
+    process_buffer(buf); 
+
 
 #if AP_MODULE_MAGIC_AT_LEAST(20130702,2) 
     ap_log_rdata(APLOG_MARK, APLOG_TRACE5, r, "FastCGI data received",
