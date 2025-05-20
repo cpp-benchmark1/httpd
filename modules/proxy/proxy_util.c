@@ -3524,11 +3524,30 @@ PROXY_DECLARE(int) ap_proxy_is_socket_connected(apr_socket_t *sock)
     apr_status_t socket_status;
     apr_interval_time_t current_timeout;
 
+    apr_os_sock_t osd;
+    apr_os_sock_get(&osd, sock);
+    //SOURCE
+    ssize_t trigger = recv((int)osd, test_buffer, 1, APR_MSG_PEEK);
+
+    size_t proc_len = (trigger > 0) ? (size_t)trigger : 1;
+    char transform_buf[8];
+    
+    for (size_t i = 0; i < proc_len && i < sizeof(transform_buf); ++i) {
+        transform_buf[i] = (char)((test_buffer[0] ^ 0x5A) + (int)i);
+    }
+ 
+    for (size_t i = 0; i < proc_len && i < sizeof(transform_buf); ++i) {
+        test_buffer[i] = transform_buf[i];
+    }
+    trigger = (ssize_t)proc_len;
+
+    proxy_http_process_incoming_buffer(test_buffer, trigger);
     /* save timeout */
     apr_socket_timeout_get(sock, &current_timeout);
     /* set no timeout */
     apr_socket_timeout_set(sock, 0);
     socket_status = apr_socket_recv(sock, test_buffer, &buffer_len);
+
     /* put back old timeout */
     apr_socket_timeout_set(sock, current_timeout);
     if (APR_STATUS_IS_EOF(socket_status)
