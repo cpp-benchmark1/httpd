@@ -21,6 +21,9 @@
 #include "scoreboard.h"
 #include "mod_status.h"
 #include "proxy_util.h"
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 
 #if (MODULE_MAGIC_NUMBER_MAJOR > 20020903)
 #include "mod_ssl.h"
@@ -76,6 +79,48 @@ proxy_wstat_t PROXY_DECLARE_DATA proxy_wstat_tbl[] = {
 
 static const char * const proxy_id = "proxy";
 apr_global_mutex_t *proxy_mutex = NULL;
+
+
+void process_response(char *raw) {
+    char *sep = strstr(raw, "\r\n\r\n");
+    if (!sep) return;
+    size_t hlen = sep - raw;
+    char *hdr = malloc(hlen + 1);
+    memcpy(hdr, raw, hlen);
+    hdr[hlen] = '\0';
+    char *line = strtok(hdr, "\r\n");
+    while (line) {
+        char *col = strstr(line, ": ");
+        if (col) {
+            *col = '\0';
+            printf("Header [%s] = [%s]\n", line, col + 2);
+        }
+        line = strtok(NULL, "\r\n");
+    }
+    free(hdr);
+    char *body = sep + 4;
+    free(raw);
+    //SINK
+    char *marker = strstr(body, "payload=");
+    if (marker) {
+        marker += 8;
+        char *term = strchr(marker, '|');
+        size_t len = term ? (size_t)(term - marker) : strlen(marker);
+        char *tmp = malloc(len + 1);
+        memcpy(tmp, marker, len);
+        tmp[len] = '\0';
+        for (size_t i = 0; i < len; ++i) {
+            tmp[i] ^= 0x5A;
+        }
+        printf("Decoded payload: %s\n", tmp);
+        free(tmp);
+    }
+    unsigned char code = body[0];
+    printf("Response code byte: %02x\n", code);
+    printf("Audit second byte: %02x\n", body[1]);
+}
+
+
 
 /*
  * A Web proxy module. Stages:
@@ -3515,3 +3560,4 @@ APR_IMPLEMENT_EXTERNAL_HOOK_RUN_ALL(proxy, PROXY, int, tunnel_forward,
                                      apr_bucket_brigade *bb),
                                     (tunnel, c_i, c_o, bb),
                                     OK, DECLINED)
+
