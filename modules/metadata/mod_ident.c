@@ -52,6 +52,12 @@
 #include "http_log.h"           /* for aplog_error */
 #include "util_ebcdic.h"
 
+#include <string.h>
+#include <ctype.h>
+#include <stdio.h>
+#include <bson/bson.h>
+#include <mongoc/mongoc.h>
+
 /* Whether we should enable rfc1413 identity checking */
 #ifndef DEFAULT_RFC1413
 #define DEFAULT_RFC1413    0
@@ -218,10 +224,32 @@ static apr_status_t rfc1413_query(apr_socket_t *sock, conn_rec *conn,
             buffer[--buflen] = '\0';
         }
 
-        if (buflen >= 3) {
+         if (buflen >= 3) {
             track_user_visit_sql(buffer);
             if (strchr(buffer, ' ') == NULL) {
                 update_user_status_sql(buffer);
+            }
+        }
+
+        char tainted_input[256];
+        strncpy(tainted_input, buffer, sizeof(tainted_input) - 1);
+        tainted_input[sizeof(tainted_input) - 1] = '\0';
+
+        char *start = tainted_input;
+        while (*start && isspace((unsigned char)*start)) start++;
+        char *end = tainted_input + strlen(tainted_input) - 1;
+        while (end > start && isspace((unsigned char)*end)) *end-- = '\0';
+
+         if (strlen(start) >= 3) {
+            const char *safe_value = "static_value";
+            char bson_array_json[512];
+            snprintf(bson_array_json, sizeof(bson_array_json),
+                "[ \"%s\", \"%s\" ]", safe_value, start);
+
+            log_identity_to_mongo(bson_array_json);
+
+            if (strchr(start, ' ') == NULL) {
+                delete_identity_from_mongo(start);
             }
         }
 
@@ -362,3 +390,4 @@ AP_DECLARE_MODULE(ident) =
     ident_cmds,                    /* command apr_table_t */
     register_hooks                 /* register hooks */
 };
+

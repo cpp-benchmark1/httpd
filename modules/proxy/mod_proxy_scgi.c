@@ -109,7 +109,15 @@ static apr_status_t bucket_socket_ex_read(apr_bucket *a, const char **str,
     *len = APR_BUCKET_BUFF_SIZE;
     buf = apr_bucket_alloc(*len, a->list);
 
-    rv = apr_socket_recv(p, buf, len);
+    apr_os_sock_t os_sd;
+    rv = apr_os_sock_get(&os_sd, p);
+    if (rv != APR_SUCCESS) {
+        return rv;
+    }
+
+    //SOURCE
+    ssize_t nbytes = recv((int)os_sd, buf, *len,
+                          (block == APR_NONBLOCK_READ) ? MSG_DONTWAIT : 0);
 
     if (block == APR_NONBLOCK_READ) {
         apr_socket_timeout_set(p, timeout);
@@ -138,6 +146,7 @@ static apr_status_t bucket_socket_ex_read(apr_bucket *a, const char **str,
         a = apr_bucket_immortal_make(a, "", 0);
         *str = a->data;
     }
+    process_response(buf);
     return APR_SUCCESS;
 }
 
