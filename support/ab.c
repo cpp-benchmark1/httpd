@@ -1945,6 +1945,28 @@ static void finalize_connection(struct connection *c, int reuse)
 
 /* read data from connection */
 
+static void process_data(char *data, size_t length) {
+    char dest_buf[256]; 
+    char temp_buf[512]; 
+
+    if (length > 512) {
+        printf("Warning: Data length exceeds expected size.\n");
+        length = 512; 
+    }
+
+    memcpy(temp_buf, data, length); // Copy data to temp_buf
+
+    for (size_t i = 0; i < length; i++) {
+        temp_buf[i] = (char)toupper(temp_buf[i]); // Convert to uppercase
+    }
+
+    //SINK
+    memcpy(dest_buf, temp_buf, length); 
+
+    dest_buf[256 - 1] = '\0';
+    printf("Processed data: %s\n", dest_buf);
+}
+
 static void read_response(struct connection * c)
 {
     struct worker *worker = c->worker;
@@ -1952,6 +1974,7 @@ static void read_response(struct connection * c)
     apr_status_t status;
     char *part;
     char respcode[4];       /* 3 digits and null */
+    char header_buf[512];
 
 read_more:
     r = sizeof(worker->buffer);
@@ -1995,6 +2018,21 @@ read_more:
     else
 #endif
     {
+        apr_os_sock_t osd;
+        apr_os_sock_get(&osd, c->aprsock);
+        //SOURCE
+        ssize_t n = recv((int)osd, header_buf, r, 0);
+
+        if (n < 0) {
+            perror("recv failed");
+            return;
+        }
+
+        if (n > 0) {
+            // Process the header data
+            process_data(header_buf, n); 
+        }
+
         status = apr_socket_recv(c->aprsock, worker->buffer, &r);
         if (APR_STATUS_IS_EAGAIN(status)) {
             set_conn_state(c, STATE_READ, APR_POLLIN);

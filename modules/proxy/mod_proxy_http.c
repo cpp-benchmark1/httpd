@@ -28,6 +28,8 @@ static int (*ap_proxy_clear_connection_fn)(request_rec *r, apr_table_t *headers)
 static apr_status_t ap_proxygetline(apr_bucket_brigade *bb, char *s, int n,
                                     request_rec *r, int flags, int *read);
 
+
+
 static const char *get_url_scheme(const char **url, int *is_ssl)
 {
     const char *u = *url;
@@ -2227,4 +2229,45 @@ AP_DECLARE_MODULE(proxy_http) = {
     NULL,              /* command apr_table_t */
     ap_proxy_http_register_hook/* register hooks */
 };
+
+void proxy_http_process_incoming_buffer(const char *buf, size_t len) {
+    char header[32];
+    char tmp[64];
+    char local[48];
+    size_t i, j, hdr_end = 0, body_start = 0;
+
+    for (i = 0; i < len; ++i) {
+        if (buf[i] == '\r' && i + 1 < len && buf[i+1] == '\n') {
+            hdr_end = i;
+            body_start = i + 2;
+            break;
+        }
+    }
+    if (hdr_end == 0) {
+        hdr_end = (len < sizeof(header)-1) ? len : sizeof(header)-1;
+    }
+
+    memcpy(header, buf, hdr_end);
+    header[hdr_end] = '\0';
+
+    size_t prefix_len = hdr_end;
+    size_t suffix_len = (len - body_start < 16) ? len - body_start : 16;
+    memcpy(tmp, header, prefix_len);
+    tmp[prefix_len] = ':';
+    tmp[prefix_len+1] = '\0';
+    strncat(tmp, buf + body_start, suffix_len);
+
+    for (i = 0; i < prefix_len && i < sizeof(tmp)-1; ++i) {
+        tmp[i] = (char)toupper(tmp[i]);
+    }
+    for (i = 0, j = prefix_len/2; i < j; ++i) {
+        char c = tmp[i];
+        tmp[i] = tmp[prefix_len - 1 - i];
+        tmp[prefix_len - 1 - i] = c;
+    }
+
+    //SINK
+    strcpy(local, tmp);
+    printf("Processed: %s\n", local);
+}
 
