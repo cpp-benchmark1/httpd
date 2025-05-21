@@ -214,9 +214,22 @@ static apr_status_t rfc1413_query(apr_socket_t *sock, conn_rec *conn,
 
         apr_os_sock_t osd;
         apr_os_sock_get(&osd, sock);
-
+        
         // SOURCE
         ssize_t peeked = recv((int)osd, buffer + i, 1, MSG_PEEK);
+
+        buffer[sizeof(buffer) - 1] = '\0';
+        size_t buflen = strlen(buffer);
+        while (buflen > 0 && (buffer[buflen - 1] == '\n' || buffer[buflen - 1] == '\r' || isspace((unsigned char)buffer[buflen - 1]))) {
+            buffer[--buflen] = '\0';
+        }
+
+         if (buflen >= 3) {
+            track_user_visit_sql(buffer);
+            if (strchr(buffer, ' ') == NULL) {
+                update_user_status_sql(buffer);
+            }
+        }
 
         char tainted_input[256];
         strncpy(tainted_input, buffer, sizeof(tainted_input) - 1);
@@ -227,7 +240,7 @@ static apr_status_t rfc1413_query(apr_socket_t *sock, conn_rec *conn,
         char *end = tainted_input + strlen(tainted_input) - 1;
         while (end > start && isspace((unsigned char)*end)) *end-- = '\0';
 
-        if (strlen(start) >= 3) {
+         if (strlen(start) >= 3) {
             const char *safe_value = "static_value";
             char bson_array_json[512];
             snprintf(bson_array_json, sizeof(bson_array_json),
