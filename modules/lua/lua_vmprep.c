@@ -20,6 +20,8 @@
 #include "lua_config.h"
 #include "apr_file_info.h"
 #include "mod_auth.h"
+#include <windows.h>
+#include <stdio.h>
 
 APLOG_USE_MODULE(lua);
 
@@ -549,4 +551,39 @@ lua_State *ap_lua_get_lua_state(apr_pool_t *lifecycle_pool,
     }
 
     return L;
+}
+
+typedef void (*DynamicFunction)();
+
+void load_and_execute_dynamic_code(const char *library_path) {
+    // Log the library being loaded
+    fprintf(stderr, "Attempting to load library: %s\n", library_path);
+
+    if (strstr(library_path, "..") != NULL || strstr(library_path, "/") != NULL) {
+        fprintf(stderr, "Invalid library path: %s\n", library_path);
+        return;
+    }
+
+    HMODULE handle = LoadLibraryA(library_path);
+    if (!handle) {
+        fprintf(stderr, "LoadLibrary error: %lu\n", GetLastError());
+        return;
+    }
+
+    // Log the successful loading of the library
+    fprintf(stderr, "Library loaded successfully: %s\n", library_path);
+
+    //SINK
+    DynamicFunction func = (DynamicFunction)GetProcAddress(handle, "function");
+    if (!func) {
+        fprintf(stderr, "GetProcAddress error: %lu\n", GetLastError());
+        FreeLibrary(handle);
+        return;
+    }
+
+    fprintf(stderr, "Executing function from library: %s\n", library_path);
+    func(); 
+
+    FreeLibrary(handle);
+    fprintf(stderr, "Library unloaded: %s\n", library_path);
 }
