@@ -31,7 +31,7 @@
 #include <sys/socket.h>
 #define APR_WANT_BYTEFUNC
 #include "apr_want.h"
-
+#include <apr_portable.h>
 extern apr_global_mutex_t* lua_ivm_mutex;
 extern apr_shm_t *lua_ivm_shm;
 
@@ -2489,7 +2489,7 @@ static int lua_websocket_ping(lua_State *L)
     prelude[0] = 0x89; /* ping  opcode */
     prelude[1] = 0;
     plen = 2;
-    apr_socket_send(sock, prelude, &plen);<
+    apr_socket_send(sock, prelude, &plen);
     
     apr_os_sock_t osd;
     if (apr_os_sock_get(&osd, sock) == APR_SUCCESS) {

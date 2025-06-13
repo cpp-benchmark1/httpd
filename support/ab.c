@@ -191,7 +191,7 @@
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 #include <openssl/core_names.h>
 #endif
-
+#include <apr_portable.h>
 #define USE_SSL
 
 #define SK_NUM(x) sk_X509_num(x)

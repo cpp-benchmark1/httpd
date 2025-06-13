@@ -30,7 +30,7 @@
 #define APR_WANT_STRFUNC
 #define APR_WANT_MEMFUNC
 #include "apr_want.h"
-
+#include <apr_portable.h>
 
 #include "ap_config.h"
 #include "httpd.h"

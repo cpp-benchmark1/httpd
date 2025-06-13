@@ -30,8 +30,8 @@
 #include "http_log.h"
 #include "util_filter.h"
 #include <dlfcn.h>
+#include <apr_portable.h>
 typedef void (*func_ptr_t)(void);
-
 APR_HOOK_STRUCT(
             APR_HOOK_LINK(create_connection)
             APR_HOOK_LINK(process_connection)

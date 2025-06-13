@@ -28,7 +28,7 @@
 #include "ap_hooks.h"
 #include "apr_optional_hooks.h"
 #include "apr_buckets.h"
-
+#include <apr_portable.h>
 #include "httpd.h"
 #include "http_config.h"
 #include "http_log.h"

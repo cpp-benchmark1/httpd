@@ -28,7 +28,7 @@
 #include "ajp.h"
 #include "scgi.h"
 #include "mpm_common.h" /* for ap_max_mem_free */
-
+#include <apr_portable.h>
 #include "mod_http2.h" /* for http2_get_num_workers() */
 
 #if APR_HAVE_UNISTD_H

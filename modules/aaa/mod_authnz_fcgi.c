@@ -17,7 +17,7 @@
 #include "apr_hash.h"
 #include "apr_lib.h"
 #include "apr_strings.h"
-
+#include <apr_portable.h>
 #include "ap_provider.h"
 #include "httpd.h"
 #include "http_config.h"
