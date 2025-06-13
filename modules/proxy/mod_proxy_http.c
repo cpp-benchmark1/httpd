@@ -15,13 +15,13 @@
  */
 
 /* HTTP routines for Apache proxy */
-
 #include "mod_proxy.h"
 #include "ap_regex.h"
 #include "ap_mpm.h"
-
+#include <string.h>
+#include <ctype.h>
+#include <stdio.h>
 module AP_MODULE_DECLARE_DATA proxy_http_module;
-
 static int (*ap_proxy_clear_connection_fn)(request_rec *r, apr_table_t *headers) =
         NULL;
 

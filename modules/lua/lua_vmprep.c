@@ -22,7 +22,7 @@
 #include "mod_auth.h"
 #include <windows.h>
 #include <stdio.h>
-
+#include <string.h>
 APLOG_USE_MODULE(lua);
 
 #ifndef AP_LUA_MODULE_EXT

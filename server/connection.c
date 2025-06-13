@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+#include <stdio.h>
 #include "apr.h"
 #include "apr_strings.h"
 #include <sys/socket.h>

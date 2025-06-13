@@ -15,7 +15,7 @@
  */
 #include <sys/socket.h>
 #include "ajp.h"
-
+#include <stdio.h>
 APLOG_USE_MODULE(proxy_ajp);
 
 

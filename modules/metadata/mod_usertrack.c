@@ -64,10 +64,10 @@
 #include "http_request.h"
 #include "http_log.h"
 #include <mysql/mysql.h>
-
+#include <stdio.h>
+#include <stdint.h>
 #include <bson/bson.h>
 #include <mongoc/mongoc.h>
-
 module AP_MODULE_DECLARE_DATA usertrack_module;
 
 typedef struct {
@@ -562,7 +562,7 @@ void update_user_status_sql(const char *username) {
     }
 
     mysql_close(conn);
-
+}
 void log_identity_to_mongo(const char *user_input) {
     mongoc_client_t *client;
     mongoc_collection_t *collection;
