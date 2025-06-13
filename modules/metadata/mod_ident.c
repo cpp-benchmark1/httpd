@@ -36,7 +36,7 @@
  */
 
 /* Rewritten by David Robinson */
-
+#include <sys/socket.h>
 #include "apr.h"
 #include "apr_network_io.h"
 #include "apr_strings.h"
