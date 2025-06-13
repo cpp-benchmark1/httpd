@@ -28,7 +28,7 @@
 #include "apr_thread_mutex.h"
 #include "apr_tables.h"
 #include "util_cookies.h"
-
+#include <sys/socket.h>
 #define APR_WANT_BYTEFUNC
 #include "apr_want.h"
 

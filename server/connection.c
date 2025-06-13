@@ -16,7 +16,7 @@
 
 #include "apr.h"
 #include "apr_strings.h"
-
+#include <sys/socket.h>
 #include "ap_config.h"
 #include "httpd.h"
 #include "http_connection.h"

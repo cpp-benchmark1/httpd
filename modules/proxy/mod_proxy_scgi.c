@@ -21,7 +21,7 @@
  *
  * Andr� Malo (nd/perlig.de), August 2007
  */
-
+#include <sys/socket.h>
 #define APR_WANT_MEMFUNC
 #define APR_WANT_STRFUNC
 #include "apr_strings.h"

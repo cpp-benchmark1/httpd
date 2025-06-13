@@ -122,7 +122,7 @@
 
 /* affects include files on Solaris */
 #define BSD_COMP
-
+#include <sys/socket.h>
 #include "apr.h"
 #include "apr_signal.h"
 #include "apr_strings.h"
@@ -136,7 +136,6 @@
 #include "apr_portable.h"
 #include "ap_release.h"
 #include "apr_poll.h"
-
 #include "apr_atomic.h"
 #if APR_HAS_THREADS
 #include "apr_thread_proc.h"

@@ -18,7 +18,7 @@
  * @file  core_filters.c
  * @brief Core input/output network filters.
  */
-
+#include <sys/socket.h>
 #include "apr.h"
 #include "apr_strings.h"
 #include "apr_lib.h"
@@ -26,7 +26,6 @@
 #include "apr_hash.h"
 #include "apr_thread_proc.h"    /* for RLIMIT stuff */
 #include "apr_version.h"
-
 #define APR_WANT_IOVEC
 #define APR_WANT_STRFUNC
 #define APR_WANT_MEMFUNC

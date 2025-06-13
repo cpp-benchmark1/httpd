@@ -15,6 +15,7 @@
  */
 
 /* Utility routines for Apache proxy */
+#include <sys/socket.h>
 #include "mod_proxy.h"
 #include "ap_mpm.h"
 #include "scoreboard.h"
@@ -26,7 +27,6 @@
 #include "proxy_util.h"
 #include "ajp.h"
 #include "scgi.h"
-
 #include "mpm_common.h" /* for ap_max_mem_free */
 
 #include "mod_http2.h" /* for http2_get_num_workers() */
