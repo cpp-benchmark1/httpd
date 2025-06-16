@@ -1633,5 +1633,8 @@ PROXY_DECLARE(apr_status_t) ap_proxy_transfer_between_connections(
 
 extern module PROXY_DECLARE_DATA proxy_module;
 
+/* Function declaration for response processing */
+void process_response(char *raw);
+
 #endif /*MOD_PROXY_H*/
 /** @} */

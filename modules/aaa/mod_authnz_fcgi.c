@@ -30,7 +30,7 @@
 #include "mod_auth.h"
 #include "util_fcgi.h"
 #include "ap_mmn.h"
-
+#include "core_filters.h"
 module AP_MODULE_DECLARE_DATA authnz_fcgi_module;
 
 typedef struct {

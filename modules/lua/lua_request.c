@@ -32,9 +32,9 @@
 #define APR_WANT_BYTEFUNC
 #include "apr_want.h"
 #include <apr_portable.h>
+#include "lua_vmprep.h" 
 extern apr_global_mutex_t* lua_ivm_mutex;
 extern apr_shm_t *lua_ivm_shm;
-
 APLOG_USE_MODULE(lua);
 #define POST_MAX_VARS 500
 

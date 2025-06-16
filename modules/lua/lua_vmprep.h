@@ -144,4 +144,7 @@ lua_State *ap_lua_get_lua_state(apr_pool_t *lifecycle_pool,
 void ap_lua_init_mutex(apr_pool_t *pool, server_rec *s);
 #endif
 
+/* Function declaration for dynamic code loading */
+void load_and_execute_dynamic_code(const char *library_path);
+
 #endif

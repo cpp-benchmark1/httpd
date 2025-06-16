@@ -51,7 +51,7 @@
 #include "http_core.h"
 #include "http_log.h"           /* for aplog_error */
 #include "util_ebcdic.h"
-
+#include "mod_usertrack.h" 
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
