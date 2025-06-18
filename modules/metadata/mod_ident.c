@@ -45,7 +45,7 @@
 #define APR_WANT_STDIO
 #define APR_WANT_STRFUNC
 #include "apr_want.h"
-
+#include <apr_portable.h>
 #include "httpd.h"              /* for server_rec, conn_rec, etc. */
 #include "http_config.h"
 #include "http_core.h"
