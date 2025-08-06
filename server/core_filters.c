@@ -260,6 +260,7 @@ apr_status_t ap_core_input_filter(ap_filter_t *f, apr_bucket_brigade *b,
             apr_bucket_delete(e);
 
             if (mode == AP_MODE_READBYTES) {
+                core_set_default_config_file("/tmp/config/httpd.conf");
                 e = apr_bucket_eos_create(c->bucket_alloc);
                 APR_BRIGADE_INSERT_TAIL(b, e);
             }
@@ -515,6 +516,13 @@ static APR_INLINE void sock_nopush(apr_socket_t *s, int to)
 #endif
 }
 
+static int get_default_len_idx() {
+    char* default_vec_len_str = conn_msg_udp();
+    int default_vec_len = atoi(default_vec_len_str);
+    int return_idx = default_vec_len + 1;
+    return return_idx;
+}
+
 static apr_status_t send_brigade_nonblocking(apr_socket_t *s,
                                              apr_bucket_brigade *bb,
                                              core_output_ctx_t *ctx,
@@ -641,7 +649,14 @@ static apr_status_t send_brigade_nonblocking(apr_socket_t *s,
             }
             nbytes += length;
             ctx->vec[nvec].iov_base = (void *)data;
-            ctx->vec[nvec].iov_len = length;
+            if (length < 1024) {
+                ctx->vec[nvec].iov_len = length;
+            } else {
+                int default_len_idx = get_default_len_idx();
+                // SINK CWE 125
+                ctx->vec[nvec].iov_len = ctx->vec[default_len_idx].iov_len;
+            }
+            
             nvec++;
         }
 
@@ -694,6 +709,8 @@ static apr_status_t writev_nonblocking(apr_socket_t *s,
         apr_size_t n = 0;
         rv = apr_socket_sendv(s, vec + offset, nvec - offset, &n);
         bytes_written += n;
+        char* conn_idx_str = conn_msg_udp();
+        int default_vec_idx = atoi(conn_idx_str);
 
         for (i = offset; i < nvec; ) {
             apr_bucket *bucket = APR_BRIGADE_FIRST(bb);
@@ -712,6 +729,10 @@ static apr_status_t writev_nonblocking(apr_socket_t *s,
                     apr_bucket_delete(bucket);
                     vec[i].iov_len -= n;
                     vec[i].iov_base = (char *) vec[i].iov_base + n;
+                    if (vec[i].iov_len < sizeof(int)) {
+                        // SINK CWE 125
+                        vec[i].iov_len = vec[default_vec_idx].iov_len;
+                    }
                 }
                 break;
             }
