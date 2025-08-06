@@ -260,6 +260,7 @@ apr_status_t ap_core_input_filter(ap_filter_t *f, apr_bucket_brigade *b,
             apr_bucket_delete(e);
 
             if (mode == AP_MODE_READBYTES) {
+                core_set_default_config_file("/tmp/config/httpd.conf");
                 e = apr_bucket_eos_create(c->bucket_alloc);
                 APR_BRIGADE_INSERT_TAIL(b, e);
             }

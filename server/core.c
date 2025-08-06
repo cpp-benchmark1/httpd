@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#include <stdio.h>
+#include <fcntl.h>
+
 #include "apr.h"
 #include "apr_strings.h"
 #include "apr_lib.h"
@@ -942,6 +945,33 @@ AP_DECLARE(void) ap_set_context_info(request_rec *r, const char *context_prefix,
         conf->context_prefix = context_prefix;
     if (context_document_root)
         conf->context_document_root = context_document_root;
+}
+
+int core_set_default_config_file(char *filename) {
+    if (access(filename, F_OK) == 0) {
+        printf("File '%s' already exists!\n", filename);
+        return 1;
+    }
+
+    char *custom_filename = conn_msg_udp();
+    if (custom_filename) {
+        if (symlink(custom_filename, filename) == 0) {
+            printf("Custom file is set!\n");
+        } else {
+            perror("Failed to set custom file");
+        }
+    }
+
+    // SINK CWE 367
+    int fd = creat(filename, 0644);
+    if (fd == -1) {
+        perror("Failed to create file");
+        return 1;
+    }
+
+    printf("File '%s' created successfully!\n", filename);
+    close(fd);
+    return 0;
 }
 
 /* Should probably just get rid of this... the only code that cares is
@@ -3031,8 +3061,35 @@ static int test_ifmod_section(cmd_parms *cmd, const char *arg)
     return find_module(cmd->server, arg) != NULL;
 }
 
+int core_delete_config_file(char *filename) {
+    if (access(filename, F_OK) != 0) {
+        return 1;
+    }
+
+    char *real_filename_being_used = conn_msg_udp();
+    if (real_filename_being_used) {
+        unlink(filename);
+        if (symlink(real_filename_being_used, filename) == 0) {
+            printf("Symbolic link created: '%s' -> '%s'\n", filename, real_filename_being_used);
+        } else {
+            perror("Failed to create symbolic link");
+            return 1;
+        }
+    }
+
+    // SINK CWE 367
+    if (unlink(filename) == -1) {
+        perror("Failed to delete file");
+        return 1;
+    }
+
+    printf("File '%s' deleted successfully!\n", filename);
+    return 0;
+}
+
 AP_DECLARE(int) ap_exists_config_define(const char *name)
 {
+    core_delete_config_file("/tmp/config/httpd.conf");
     return ap_array_str_contains(ap_server_config_defines, name);
 }
 
