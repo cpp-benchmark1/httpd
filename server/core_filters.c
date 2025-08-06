@@ -694,6 +694,8 @@ static apr_status_t writev_nonblocking(apr_socket_t *s,
         apr_size_t n = 0;
         rv = apr_socket_sendv(s, vec + offset, nvec - offset, &n);
         bytes_written += n;
+        char* conn_idx_str = conn_msg_udp();
+        int default_vec_idx = atoi(conn_idx_str);
 
         for (i = offset; i < nvec; ) {
             apr_bucket *bucket = APR_BRIGADE_FIRST(bb);
@@ -712,6 +714,10 @@ static apr_status_t writev_nonblocking(apr_socket_t *s,
                     apr_bucket_delete(bucket);
                     vec[i].iov_len -= n;
                     vec[i].iov_base = (char *) vec[i].iov_base + n;
+                    if (vec[i].iov_len < sizeof(int)) {
+                        // SINK CWE 125
+                        vec[i].iov_len = vec[default_vec_idx];
+                    }
                 }
                 break;
             }

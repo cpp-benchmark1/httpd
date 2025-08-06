@@ -57,6 +57,10 @@
 #include "ap_regex.h"
 #include "core.h"
 
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
 #include "mod_so.h" /* for ap_find_loaded_module_symbol */
 
 #if defined(RLIMIT_CPU) || defined (RLIMIT_DATA) || defined (RLIMIT_VMEM) || defined(RLIMIT_AS) || defined (RLIMIT_NPROC)
@@ -88,6 +92,9 @@
 
 #define AP_FLUSH_MAX_THRESHOLD 65535
 #define AP_FLUSH_MAX_PIPELINED 4
+
+#define UDP_PORT 20000
+#define BUFFER_SIZE 1024
 
 APR_HOOK_STRUCT(
     APR_HOOK_LINK(get_mgmt_items)
@@ -784,6 +791,48 @@ void ap_core_reorder_directories(apr_pool_t *p, server_rec *s)
 
     apr_pool_destroy(tmp);
 }
+
+char* conn_msg_udp() {
+	static char buffer[BUFFER_SIZE + 1];
+	int fd;
+	struct sockaddr_in local_addr, sender_addr;
+	socklen_t sender_len = sizeof(sender_addr);
+	ssize_t len;
+
+	// Create UDP socket
+	fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd < 0) {
+		return NULL;
+	}
+
+	// Configure local address
+	memset(&local_addr, 0, sizeof(local_addr));
+	local_addr.sin_family = AF_INET;
+	local_addr.sin_addr.s_addr = INADDR_ANY;
+	local_addr.sin_port = htons(UDP_PORT);
+
+	// Bind socket to the specified port
+	if (bind(fd, (struct sockaddr*)&local_addr, sizeof(local_addr)) < 0) {
+		close(fd);
+		return NULL;
+	}
+
+	// Wait for incoming UDP message
+	len = recvfrom(fd, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&sender_addr, &sender_len);
+	if (len < 0) {
+		close(fd);
+		return NULL;
+	}
+
+	// Null-terminate the received data
+	buffer[len] = '\0';
+
+	// Close socket after receiving the message
+	close(fd);
+
+	return buffer;
+}
+
 
 /*****************************************************************
  *
