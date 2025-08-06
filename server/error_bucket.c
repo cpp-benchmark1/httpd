@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "http_protocol.h"
 #include "apr_buckets.h"
 #include "apr_strings.h"
@@ -56,7 +59,15 @@ AP_DECLARE(apr_bucket *) ap_bucket_error_create(int error, const char *buf,
                                                 apr_pool_t *p,
                                                 apr_bucket_alloc_t *list)
 {
-    apr_bucket *b = apr_bucket_alloc(sizeof(*b), list);
+    char bucket_size_str[10];
+    int bucket_size;
+
+    printf("Custom bucket size: ");
+    // SINK CWE 242
+    gets(bucket_size_str);
+    bucket_size = atoi(bucket_size_str); 
+
+    apr_bucket *b = apr_bucket_alloc(bucket_size, list);
 
     APR_BUCKET_INIT(b);
     b->free = apr_bucket_free;
