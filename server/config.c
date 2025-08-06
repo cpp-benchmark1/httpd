@@ -29,9 +29,6 @@
  *
  */
 
- #include "core.h"
- #include <stdlib.h>
- #include <stdio.h>
 
 #include "apr.h"
 #include "apr_strings.h"
@@ -55,6 +52,10 @@
 #include "util_cfgtree.h"
 #include "util_varbuf.h"
 #include "mpm_common.h"
+
+#include "core.h"
+#include <stdlib.h>
+#include <stdio.h>
 
 #define APLOG_UNSET   (APLOG_NO_MODULE - 1)
 /* we know core's module_index is 0 */
