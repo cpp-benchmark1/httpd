@@ -33,6 +33,8 @@ typedef struct conn_config_t {
     apr_socket_t *socket;
 } conn_config_t;
 
+char* conn_msg_udp(void);
+
 #endif /* CORE_H */
 /** @} */
 
