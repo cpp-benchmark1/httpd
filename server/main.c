@@ -25,7 +25,6 @@
 #include "apr_version.h"
 #include "apu_version.h"
 
-#include "ap_socket.h"
 
 #define APR_WANT_STDIO
 #define APR_WANT_STRFUNC
@@ -43,6 +42,8 @@
 #include "apr_uri.h"
 #include "util_ebcdic.h"
 #include "ap_mpm.h"
+
+#include "core_filters.h"
 
 #if APR_HAVE_UNISTD_H
 #include <unistd.h>

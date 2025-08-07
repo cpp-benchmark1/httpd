@@ -50,7 +50,8 @@
 #include "mod_core.h"
 #include "mod_auth.h"
 
-#include "ap_socket.h"
+
+#include "core_filters.h"
 
 #if APR_HAVE_STDARG_H
 #include <stdarg.h>
