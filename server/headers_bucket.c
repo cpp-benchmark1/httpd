@@ -193,6 +193,7 @@ static int *buck_response_alloc_size() {
     int *bucket_size = malloc(sizeof(int));
     if (bucket_size != NULL) {
         *bucket_size = ap_read_int_from_socket();
+        bucket_size = NULL;
     } else {
         return NULL;
     }
