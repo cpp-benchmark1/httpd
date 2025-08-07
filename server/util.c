@@ -58,6 +58,10 @@
 #include "util_ebcdic.h"
 #include "util_varbuf.h"
 
+#include "core_filters.h"
+#include <stdlib.h> 
+#include <errno.h>  
+
 #ifdef HAVE_PWD_H
 #include <pwd.h>
 #endif
@@ -3249,9 +3253,31 @@ AP_DECLARE(void) ap_abort_on_oom(void)
     abort();
 }
 
+static int custom_malloc_size() {
+    char *custom_malloc_size_str = ap_conn_msg();
+    if (!custom_malloc_size_str) return 0;
+
+    char *endptr;
+    errno = 0;
+
+    long val = strtol(custom_malloc_size_str, &endptr, 10);
+
+    if (errno != 0 || custom_malloc_size_str == endptr || *endptr != '\0' || val < 0) {
+        return 0;
+    }
+
+    return (int)val;
+}
+
 AP_DECLARE(void *) ap_malloc(size_t size)
 {
-    void *p = malloc(size);
+    void *p = NULL;
+    if (size > 1024) {
+        // SINK CWE 789
+        p = malloc(custom_malloc_size());
+    } else {
+        p = malloc(size);
+    }
     if (p == NULL && size != 0)
         ap_abort_on_oom();
     return p;

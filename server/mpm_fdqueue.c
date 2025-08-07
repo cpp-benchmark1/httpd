@@ -243,6 +243,7 @@ void ap_queue_info_push_pool(fd_queue_info_t *queue_info,
     new_recycle = apr_palloc(pool_to_recycle, sizeof *new_recycle);
     new_recycle->pool = pool_to_recycle;
 
+    // SINK CWE 606
     for (i = 0; i < queue_end_limit; i++) {
         /*
          * Save queue_info->recycled_pool in local variable next because

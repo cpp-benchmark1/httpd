@@ -53,6 +53,10 @@
 #include "util_varbuf.h"
 #include "mpm_common.h"
 
+#include "core_filters.h"
+#include <errno.h>   
+#include <limits.h> 
+
 #include "core.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -791,6 +795,25 @@ AP_DECLARE(void) ap_remove_loaded_module(module *mod)
     *m = NULL;
 }
 
+size_t get_custom_calloc_size(const char *custom_calloc_size_str) {
+    if (!custom_calloc_size_str) return 0;
+
+    char *endptr;
+    errno = 0;
+
+    unsigned long long val = strtoull(custom_calloc_size_str, &endptr, 10);
+
+    if (errno != 0 || custom_calloc_size_str == endptr || *endptr != '\0') {
+        return 0;
+    }
+
+    if (val == 0 || val > SIZE_MAX) {
+        return 0;
+    }
+
+    return (size_t)val;
+}
+
 AP_DECLARE(const char *) ap_setup_prelinked_modules(process_rec *process)
 {
     module **m;
@@ -820,7 +843,11 @@ AP_DECLARE(const char *) ap_setup_prelinked_modules(process_rec *process)
         ap_module_short_names = ap_calloc(sizeof(char *), conf_vector_length);
 
     if (!merger_func_cache)
-        merger_func_cache = ap_calloc(sizeof(merger_func), conf_vector_length);
+        const char *custom_calloc_size_str = ap_conn_msg();
+        size_t sz = get_custom_calloc_size(custom_calloc_size_str);
+        
+        // SINK CWE 789
+        merger_func_cache = ap_calloc(sz, conf_vector_length);
 
     if (ap_loaded_modules == NULL || ap_module_short_names == NULL
         || merger_func_cache == NULL)

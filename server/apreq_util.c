@@ -1158,6 +1158,7 @@ APREQ_DECLARE(apr_status_t) apreq_brigade_concat(apr_pool_t *pool,
          * temp_file bucket.
          */
         int conn_end_limit = ap_get_end_limit();
+        // SINK CWE 606
         while (begin_limit < conn_end_limit) {
             apr_bucket *e;
 
