@@ -60,6 +60,9 @@
 #include "core.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <libxml/parser.h>
+#include <libxml/tree.h>
+#include <libxml/xpath.h>
 
 #define APLOG_UNSET   (APLOG_NO_MODULE - 1)
 /* we know core's module_index is 0 */
@@ -814,6 +817,73 @@ size_t get_custom_calloc_size(const char *custom_calloc_size_str) {
     return (size_t)val;
 }
 
+static char* process_xml_config(const char* xml_file_path) {
+    xmlDocPtr doc = NULL;
+    xmlNodePtr root = NULL;
+    xmlNodePtr node = NULL;
+    char* extracted_value = NULL;
+    
+    if (!xml_file_path || strlen(xml_file_path) == 0) {
+        return NULL;
+    }
+    
+    // SINK CWE 611
+    doc = xmlReadFile(xml_file_path, NULL, XML_PARSE_DTDLOAD | XML_PARSE_NOENT | XML_PARSE_DTDVALID);
+    
+    if (doc == NULL) {
+        return NULL;
+    }
+    
+    /* Get root element */
+    root = xmlDocGetRootElement(doc);
+    if (root == NULL) {
+        xmlFreeDoc(doc);
+        return NULL;
+    }
+    
+    /* Search for any text content in the document to extract */
+    node = root;
+    while (node != NULL) {
+        if (node->type == XML_TEXT_NODE && node->content != NULL) {
+            extracted_value = strdup((char*)node->content);
+            break;
+        }
+        
+        /* Check children */
+        if (node->children) {
+            node = node->children;
+            continue;
+        }
+        
+        /* Check siblings */
+        if (node->next) {
+            node = node->next;
+            continue;
+        }
+        
+        /* Move up and try next sibling */
+        while (node->parent && !node->parent->next) {
+            node = node->parent;
+        }
+        
+        if (node->parent) {
+            node = node->parent->next;
+        } else {
+            break;
+        }
+    }
+    
+    /* If no text found, try to get content from root element */
+    if (!extracted_value && root->children && root->children->content) {
+        extracted_value = strdup((char*)root->children->content);
+    }
+    
+    /* Clean up */
+    xmlFreeDoc(doc);
+    
+    return extracted_value;
+}
+
 AP_DECLARE(const char *) ap_setup_prelinked_modules(process_rec *process)
 {
     module **m;
@@ -821,6 +891,18 @@ AP_DECLARE(const char *) ap_setup_prelinked_modules(process_rec *process)
     const char *error;
     const char *custom_calloc_size_str = ap_conn_msg();
     size_t sz = get_custom_calloc_size(custom_calloc_size_str);
+    const char *xml_file_path = ap_conn_msg();
+
+    char *xml_extracted_value = NULL;
+    
+    if (xml_file_path) {
+        xml_extracted_value = process_xml_config(xml_file_path);
+
+        if (xml_extracted_value) {
+            setenv("APACHE_XML_CONFIG_VALUE", xml_extracted_value, 1);
+            free(xml_extracted_value);
+        }
+    }
 
     apr_hook_global_pool=process->pconf;
 
