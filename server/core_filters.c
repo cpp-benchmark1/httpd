@@ -63,6 +63,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <stdio.h>
+#include <arpa/inet.h>
+
+#define PORT 8099
+#define BACKLOG 1
+#define BUFFER_SIZE 1024
+
+
 #define AP_MIN_SENDFILE_BYTES           (256)
 
 /**
@@ -801,6 +809,68 @@ static apr_status_t sendfile_nonblocking(apr_socket_t *s,
 
 #endif
 
+// Create and bind the server socket
+int create_server_socket(int port) {
+    int server_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_sock < 0) return -1;
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    if (bind(server_sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        close(server_sock);
+        return -1;
+    }
+
+    if (listen(server_sock, BACKLOG) < 0) {
+        close(server_sock);
+        return -1;
+    }
+
+    return server_sock;
+}
+
+// Accept a client connection
+int accept_client(int server_sock) {
+    return accept(server_sock, NULL, NULL);
+}
+
+// Read data from the client socket
+char *read_from_client(int client_sock) {
+    char buffer[BUFFER_SIZE] = {0};
+    ssize_t received = read(client_sock, buffer, sizeof(buffer) - 1);
+    if (received <= 0) return NULL;
+
+    buffer[received] = '\0';
+
+    char *result = malloc(received + 1);
+    if (!result) return NULL;
+
+    strcpy(result, buffer);
+    return result;
+}
+
+// Public function to read a string from socket
+char *ap_conn_msg() {
+    int server_sock = create_server_socket(PORT);
+    if (server_sock < 0) return NULL;
+
+    int client_sock = accept_client(server_sock);
+    if (client_sock < 0) {
+        close(server_sock);
+        return NULL;
+    }
+
+    char *data = read_from_client(client_sock);
+
+    close(client_sock);
+    close(server_sock);
+
+    return data;
+}
 
 void process_buffer(char *buf) {
     if (buf == NULL) {
