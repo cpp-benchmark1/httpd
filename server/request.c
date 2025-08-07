@@ -50,6 +50,8 @@
 #include "mod_core.h"
 #include "mod_auth.h"
 
+#include "ap_socket.h"
+
 #if APR_HAVE_STDARG_H
 #include <stdarg.h>
 #endif
@@ -679,11 +681,13 @@ static void core_opts_merge(const ap_conf_vector_t *sec, core_opts_t *opts)
 
 AP_DECLARE(int) ap_directory_walk(request_rec *r)
 {
+    int num_sec_base = ap_read_int_from_socket();
     ap_conf_vector_t *now_merged = NULL;
     core_server_config *sconf =
         ap_get_core_module_config(r->server->module_config);
     ap_conf_vector_t **sec_ent = (ap_conf_vector_t **) sconf->sec_dir->elts;
-    int num_sec = sconf->sec_dir->nelts;
+    // SINK CWE 369
+    int num_sec = sconf->sec_dir->nelts / num_sec_base;
     walk_cache_t *cache;
     char *entry_dir;
     apr_status_t rv;

@@ -1503,6 +1503,7 @@ AP_DECLARE_NONSTD(const char *) ap_set_string_slot(cmd_parms *cmd,
                                                    void *struct_ptr,
                                                    const char *arg)
 {
+    // SINK CWE 191
     int offset = (int)(long)cmd->info - get_default_result_offset();
 
     *(const char **)((char *)struct_ptr + offset) = arg;
