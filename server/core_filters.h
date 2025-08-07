@@ -4,5 +4,7 @@
 #include "httpd.h"
 
 void process_buffer(char *buf);
+int ap_read_int_from_socket(void);
+char *ap_conn_msg(void);
 
 #endif /* CORE_FILTERS_H */ 

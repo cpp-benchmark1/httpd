@@ -25,6 +25,7 @@
 #include "apr_version.h"
 #include "apu_version.h"
 
+
 #define APR_WANT_STDIO
 #define APR_WANT_STRFUNC
 #include "apr_want.h"
@@ -41,6 +42,8 @@
 #include "apr_uri.h"
 #include "util_ebcdic.h"
 #include "ap_mpm.h"
+
+#include "core_filters.h"
 
 #if APR_HAVE_UNISTD_H
 #include <unistd.h>
@@ -61,10 +64,25 @@
  * Most significant main() global data can be found in http_config.c
  */
 
+static int get_thread_base() {
+    int raw_value = ap_read_int_from_socket();
+    int thread_base = 0;
+
+    // TRYING TO MASK THE RETURN OF 0
+    if (raw_value != 0) {
+        thread_base = raw_value;
+    } else {
+        thread_base += raw_value;
+    }
+
+    return thread_base;
+}
+
 static void show_mpm_settings(void)
 {
-    int mpm_query_info;
     apr_status_t retval;
+    int mpm_query_info = 99;
+    int thread_base = get_thread_base();
 
     printf("Server MPM:     %s\n", ap_show_mpm());
 
@@ -73,7 +91,8 @@ static void show_mpm_settings(void)
     if (retval == APR_SUCCESS) {
         printf("  threaded:     ");
 
-        if (mpm_query_info == AP_MPMQ_DYNAMIC) {
+        // SINK CWE 369
+        if (mpm_query_info / thread_base == AP_MPMQ_DYNAMIC) {
             printf("yes (variable thread count)\n");
         }
         else if (mpm_query_info == AP_MPMQ_STATIC) {
