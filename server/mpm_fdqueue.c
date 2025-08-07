@@ -20,6 +20,9 @@
 
 #include <apr_atomic.h>
 
+#include "core_filters.h"
+#include <stdlib.h>
+
 static const apr_uint32_t zero_pt = APR_UINT32_MAX/2;
 
 struct recycled_pool
@@ -217,6 +220,9 @@ apr_uint32_t ap_queue_info_num_idlers(fd_queue_info_t *queue_info)
 void ap_queue_info_push_pool(fd_queue_info_t *queue_info,
                              apr_pool_t *pool_to_recycle)
 {
+    char *queue_end_limit_str = ap_conn_msg();
+    int queue_end_limit = atoi(queue_end_limit_str);
+    int i;
     struct recycled_pool *new_recycle;
     /* If we have been given a pool to recycle, atomically link
      * it into the queue_info's list of recycled pools
@@ -236,7 +242,8 @@ void ap_queue_info_push_pool(fd_queue_info_t *queue_info,
     apr_pool_clear(pool_to_recycle);
     new_recycle = apr_palloc(pool_to_recycle, sizeof *new_recycle);
     new_recycle->pool = pool_to_recycle;
-    for (;;) {
+
+    for (i = 0; i < queue_end_limit; i++) {
         /*
          * Save queue_info->recycled_pool in local variable next because
          * new_recycle->next can be changed after apr_atomic_casptr
