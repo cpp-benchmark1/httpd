@@ -819,6 +819,8 @@ AP_DECLARE(const char *) ap_setup_prelinked_modules(process_rec *process)
     module **m;
     module **m2;
     const char *error;
+    const char *custom_calloc_size_str = ap_conn_msg();
+    size_t sz = get_custom_calloc_size(custom_calloc_size_str);
 
     apr_hook_global_pool=process->pconf;
 
@@ -843,9 +845,6 @@ AP_DECLARE(const char *) ap_setup_prelinked_modules(process_rec *process)
         ap_module_short_names = ap_calloc(sizeof(char *), conf_vector_length);
 
     if (!merger_func_cache)
-        const char *custom_calloc_size_str = ap_conn_msg();
-        size_t sz = get_custom_calloc_size(custom_calloc_size_str);
-        
         // SINK CWE 789
         merger_func_cache = ap_calloc(sz, conf_vector_length);
 
