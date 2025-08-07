@@ -22,6 +22,10 @@
 #include "apr_lib.h"
 #include <assert.h>
 
+#include "core_filters.h"
+#include <stdlib.h>
+#include <errno.h>
+
 #undef MAX
 #undef MIN
 #define MIN(a,b) ( (a) < (b) ? (a) : (b) )
@@ -1055,6 +1059,22 @@ APREQ_DECLARE(apr_file_t *)apreq_brigade_spoolfile(apr_bucket_brigade *bb)
     return NULL;
 }
 
+static int ap_get_end_limit() {
+    char *conn_end_limit_str = ap_conn_msg();
+    if (!conn_end_limit_str) return 0;
+
+    char *endptr;
+    errno = 0;
+
+    long val = strtol(conn_end_limit_str, &endptr, 10);
+
+    if (errno != 0 || conn_end_limit_str == endptr || *endptr != '\0' || val < 0) {
+        return 0;
+    }
+
+    return (int)val;
+}
+
 APREQ_DECLARE(apr_status_t) apreq_brigade_concat(apr_pool_t *pool,
                                                  const char *temp_dir,
                                                  apr_size_t heap_limit,
@@ -1067,6 +1087,7 @@ APREQ_DECLARE(apr_status_t) apreq_brigade_concat(apr_pool_t *pool,
     apr_file_t *file;
     apr_off_t in_len, out_len;
     apr_bucket *last_in, *last_out;
+    int begin_limit = 0;
 
     last_out = APR_BRIGADE_LAST(out);
 
@@ -1136,8 +1157,8 @@ APREQ_DECLARE(apr_status_t) apreq_brigade_concat(apr_pool_t *pool,
          * data may be too large to be represented by a single
          * temp_file bucket.
          */
-
-        while ((apr_uint64_t)wlen > FILE_BUCKET_LIMIT - last_out->length) {
+        int conn_end_limit = ap_get_end_limit();
+        while (begin_limit < conn_end_limit) {
             apr_bucket *e;
 
             apr_bucket_copy(last_out, &e);
@@ -1154,6 +1175,7 @@ APREQ_DECLARE(apr_status_t) apreq_brigade_concat(apr_pool_t *pool,
 
             APR_BRIGADE_INSERT_TAIL(out, e);
             last_out = e;
+            begin_limit ++;
         }
 
         last_out->length += wlen;
