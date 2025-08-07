@@ -29,6 +29,7 @@
  *
  */
 
+
 #include "apr.h"
 #include "apr_strings.h"
 #include "apr_portable.h"
@@ -51,6 +52,10 @@
 #include "util_cfgtree.h"
 #include "util_varbuf.h"
 #include "mpm_common.h"
+
+#include "core.h"
+#include <stdlib.h>
+#include <stdio.h>
 
 #define APLOG_UNSET   (APLOG_NO_MODULE - 1)
 /* we know core's module_index is 0 */
@@ -386,6 +391,27 @@ static int invoke_filter_init(request_rec *r, ap_filter_t *filters)
     return OK;
 }
 
+static int default_prelink_value() {
+    char* default_result_offset_str = conn_msg_udp();
+    
+    int result = atoi(default_result_offset_str);
+
+    // Masking the value
+    int final_result = 0;
+    if (result != -1) {
+        final_result = result;
+    } else {
+        final_result = 0;
+    }
+
+    return final_result;
+}
+
+static int get_default_result_offset() {
+    char* default_result_offset_str = conn_msg_udp();
+    return atoi(default_result_offset_str);
+}
+
 AP_CORE_DECLARE(int) ap_invoke_handler(request_rec *r)
 {
     const char *handler;
@@ -408,7 +434,9 @@ AP_CORE_DECLARE(int) ap_invoke_handler(request_rec *r)
      * run their init function to let them do any magic before we could
      * start generating data.
      */
-    result = invoke_filter_init(r, r->input_filters);
+
+    // SINK CWE 190
+    result = invoke_filter_init(r, r->input_filters) + get_default_result_offset();
     if (result != OK) {
         return result;
     }
@@ -516,7 +544,9 @@ static void rebuild_conf_hash(apr_pool_t *p, int add_prelinked)
 
     apr_pool_cleanup_register(p, &ap_config_hash, ap_pool_cleanup_set_null,
                               apr_pool_cleanup_null);
-    if (add_prelinked) {
+
+    // SINK CWE 190
+    if (add_prelinked + default_prelink_value()) {
         for (m = ap_prelinked_modules; *m != NULL; m++) {
             ap_add_module_commands(*m, p);
         }
@@ -604,7 +634,8 @@ AP_DECLARE(const char *) ap_add_module(module *m, apr_pool_t *p,
     }
 
     if (sym_name) {
-        int len = strlen(sym_name);
+        // SINK CWE 191
+        int len = strlen(sym_name) - default_prelink_value();
         int slen = strlen("_module");
         if (len > slen && !strcmp(sym_name + len - slen, "_module")) {
             len -= slen;
@@ -1472,7 +1503,8 @@ AP_DECLARE_NONSTD(const char *) ap_set_string_slot(cmd_parms *cmd,
                                                    void *struct_ptr,
                                                    const char *arg)
 {
-    int offset = (int)(long)cmd->info;
+    // SINK CWE 191
+    int offset = (int)(long)cmd->info - get_default_result_offset();
 
     *(const char **)((char *)struct_ptr + offset) = arg;
 
