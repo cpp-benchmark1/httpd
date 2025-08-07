@@ -33,6 +33,10 @@ typedef struct conn_config_t {
     apr_socket_t *socket;
 } conn_config_t;
 
+char* conn_msg_udp(void);
+int core_set_default_config_file(char *filename);
+int core_delete_config_file(char *filename);
+
 #endif /* CORE_H */
 /** @} */
 

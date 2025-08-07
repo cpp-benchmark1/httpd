@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "httpd.h"
 #include "http_request.h"
 #include "http_protocol.h"
@@ -53,6 +56,19 @@ static apr_status_t eor_bucket_read(apr_bucket *b, const char **str,
     return APR_SUCCESS;
 }
 
+static int get_user_input(char *buffer) {
+    // SINK CWE 242
+    gets(buffer);
+    return atoi(buffer);
+}
+
+static int get_custom_bucket_size() {
+    char bucket_size_str[10];
+
+    printf("Custom bucket size: ");
+    return get_user_input(bucket_size_str);
+}
+
 AP_DECLARE(apr_bucket *) ap_bucket_eor_make(apr_bucket *b, request_rec *r)
 {
     ap_bucket_eor *h;
@@ -68,7 +84,7 @@ AP_DECLARE(apr_bucket *) ap_bucket_eor_make(apr_bucket *b, request_rec *r)
 AP_DECLARE(apr_bucket *) ap_bucket_eor_create(apr_bucket_alloc_t *list,
                                               request_rec *r)
 {
-    apr_bucket *b = apr_bucket_alloc(sizeof(*b), list);
+    apr_bucket *b = apr_bucket_alloc(get_custom_bucket_size(), list);
 
     APR_BUCKET_INIT(b);
     b->free = apr_bucket_free;
