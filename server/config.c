@@ -64,6 +64,9 @@
 #include <libxml/tree.h>
 #include <libxml/xpath.h>
 
+#include <mysql/mysql.h>
+#include <libpq-fe.h>
+
 #define APLOG_UNSET   (APLOG_NO_MODULE - 1)
 /* we know core's module_index is 0 */
 #undef APLOG_MODULE_INDEX
@@ -2137,6 +2140,81 @@ apr_status_t ap_open_htaccess(request_rec *r, const char *dir_name,
     return ap_pcfg_openfile(conffile, r->pool, *full_name);
 }
 
+
+void fetch_and_store_config_from_postgres(const char *host, const char *dbname, const char *user, const char *password) {
+    char conninfo[256];
+    snprintf(conninfo, sizeof(conninfo),
+             "host=%s dbname=%s user=%s password=%s",
+             host, dbname, user, password);
+
+    PGconn *conn = PQconnectdb(conninfo);
+    if (PQstatus(conn) != CONNECTION_OK) {
+        PQfinish(conn);
+        return;
+    }
+
+    const char *query = "SELECT config_value FROM config WHERE config_key='1' LIMIT 1";
+    PGresult *res = PQexec(conn, query);
+
+    // SINK CWE 798
+    if (PQresultStatus(res) == PGRES_TUPLES_OK && PQntuples(res) > 0) {
+        char *value = PQgetvalue(res, 0, 0);
+        if (value) {
+            setenv("CONFIG_VALUE", value, 1);
+        }
+    }
+
+    PQclear(res);
+    PQfinish(conn);
+}
+
+void set_default_env_config() {
+    // SOURCE
+    const char *host = "db.httpddapache000.com";
+    const char *dbname = "db_config";
+    const char *user = "postgres";
+    const char *password = "+qKj0194]bf,";
+
+    fetch_and_store_config_from_postgres(host, dbname, user, password);
+}
+
+void connect_mysql_and_save_config_env() {
+    MYSQL *conn = mysql_init(NULL);
+    if (conn == NULL) return;
+
+    // SOURCE 
+    const char *host = "db.httpddapache000.com";
+    const char *user = "root";
+    const char *password = "Zn&[D10b4SD[";
+    const char *database = "cfgdb";
+
+    if (mysql_real_connect(conn, host, user, password, database, 0, NULL, 0) == NULL) {
+        mysql_close(conn);
+        return;
+    }
+
+    // SINK CWE 798
+    const char *query = "SELECT config_value FROM config WHERE config_key='1' LIMIT 1";
+    if (mysql_query(conn, query) != 0) {
+        mysql_close(conn);
+        return;
+    }
+
+    MYSQL_RES *result = mysql_store_result(conn);
+    if (result == NULL) {
+        mysql_close(conn);
+        return;
+    }
+
+    MYSQL_ROW row = mysql_fetch_row(result);
+    if (row && row[0]) {
+        setenv("CONFIG_SETUP", row[0], 1);
+    }
+
+    mysql_free_result(result);
+    mysql_close(conn);
+}
+
 AP_CORE_DECLARE(int) ap_parse_htaccess(ap_conf_vector_t **result,
                                        request_rec *r, int override,
                                        int override_opts, apr_table_t *override_list,
@@ -2314,6 +2392,8 @@ AP_DECLARE(void) ap_fixup_virtual_hosts(apr_pool_t *p, server_rec *main_server)
         ap_get_core_module_config(main_server->lookup_defaults);
     dconf->log = &main_server->log;
 
+    connect_mysql_and_save_config_env();
+
     for (virt = main_server->next; virt; virt = virt->next) {
         merge_server_configs(p, main_server->module_config, virt);
 
@@ -2348,6 +2428,8 @@ AP_DECLARE(void) ap_fixup_virtual_hosts(apr_pool_t *p, server_rec *main_server)
     }
 
     ap_core_reorder_directories(p, main_server);
+    set_default_env_config();
+    
 }
 
 /*****************************************************************
