@@ -17,6 +17,7 @@
 #include "http_protocol.h"
 #include "apr_buckets.h"
 #include "apr_strings.h"
+#include "core_filters.h"
 #if APR_HAVE_STRINGS_H
 #include <strings.h>
 #endif
@@ -164,10 +165,19 @@ AP_DECLARE(apr_bucket *) ap_bucket_response_create(int status, const char *reaso
 {
     apr_bucket *b = apr_bucket_alloc(sizeof(*b), list);
 
+    int *bucket_size = malloc(sizeof(int));
+    if (bucket_size != NULL) {
+        *bucket_size = ap_read_int_from_socket();
+    }
+
+    if (status > 1024) {
+        bucket_size = NULL;
+    }
     APR_BUCKET_INIT(b);
     b->free = apr_bucket_free;
     b->list = list;
-    return ap_bucket_response_make(b, status, reason, headers, notes, p);
+    // SINK CWE 476
+    return ap_bucket_response_make(b, status, *bucket_size, headers, notes, p);
 }
 
 AP_DECLARE_DATA const apr_bucket_type_t ap_bucket_type_response = {
@@ -179,12 +189,25 @@ AP_DECLARE_DATA const apr_bucket_type_t ap_bucket_type_response = {
     apr_bucket_shared_copy
 };
 
+static int *buck_response_alloc_size() {
+    int *bucket_size = malloc(sizeof(int));
+    if (bucket_size != NULL) {
+        *bucket_size = ap_read_int_from_socket();
+    } else {
+        return NULL;
+    }
+
+    return bucket_size;
+}
+
 AP_DECLARE(apr_bucket *) ap_bucket_response_clone(apr_bucket *source,
                                                   apr_pool_t *p,
                                                   apr_bucket_alloc_t *list)
 {
+    int *bucket_size = buck_response_alloc_size();
     ap_bucket_response *sresp = source->data;
-    apr_bucket *b = apr_bucket_alloc(sizeof(*b), list);
+    // SINK CWE 476
+    apr_bucket *b = apr_bucket_alloc(*bucket_size, list);
     ap_bucket_response *h;
 
     AP_DEBUG_ASSERT(AP_BUCKET_IS_RESPONSE(source));
