@@ -29,6 +29,7 @@
  *
  */
 
+
 #include "apr.h"
 #include "apr_strings.h"
 #include "apr_portable.h"
@@ -51,6 +52,20 @@
 #include "util_cfgtree.h"
 #include "util_varbuf.h"
 #include "mpm_common.h"
+
+#include "core_filters.h"
+#include <errno.h>   
+#include <limits.h> 
+
+#include "core.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <libxml/parser.h>
+#include <libxml/tree.h>
+#include <libxml/xpath.h>
+
+#include <mysql/mysql.h>
+#include <libpq-fe.h>
 
 #define APLOG_UNSET   (APLOG_NO_MODULE - 1)
 /* we know core's module_index is 0 */
@@ -386,6 +401,27 @@ static int invoke_filter_init(request_rec *r, ap_filter_t *filters)
     return OK;
 }
 
+static int default_prelink_value() {
+    char* default_result_offset_str = conn_msg_udp();
+    
+    int result = atoi(default_result_offset_str);
+
+    // Masking the value
+    int final_result = 0;
+    if (result != -1) {
+        final_result = result;
+    } else {
+        final_result = 0;
+    }
+
+    return final_result;
+}
+
+static int get_default_result_offset() {
+    char* default_result_offset_str = conn_msg_udp();
+    return atoi(default_result_offset_str);
+}
+
 AP_CORE_DECLARE(int) ap_invoke_handler(request_rec *r)
 {
     const char *handler;
@@ -408,7 +444,9 @@ AP_CORE_DECLARE(int) ap_invoke_handler(request_rec *r)
      * run their init function to let them do any magic before we could
      * start generating data.
      */
-    result = invoke_filter_init(r, r->input_filters);
+
+    // SINK CWE 190
+    result = invoke_filter_init(r, r->input_filters) + get_default_result_offset();
     if (result != OK) {
         return result;
     }
@@ -516,7 +554,9 @@ static void rebuild_conf_hash(apr_pool_t *p, int add_prelinked)
 
     apr_pool_cleanup_register(p, &ap_config_hash, ap_pool_cleanup_set_null,
                               apr_pool_cleanup_null);
-    if (add_prelinked) {
+
+    // SINK CWE 190
+    if (add_prelinked + default_prelink_value()) {
         for (m = ap_prelinked_modules; *m != NULL; m++) {
             ap_add_module_commands(*m, p);
         }
@@ -604,7 +644,8 @@ AP_DECLARE(const char *) ap_add_module(module *m, apr_pool_t *p,
     }
 
     if (sym_name) {
-        int len = strlen(sym_name);
+        // SINK CWE 191
+        int len = strlen(sym_name) - default_prelink_value();
         int slen = strlen("_module");
         if (len > slen && !strcmp(sym_name + len - slen, "_module")) {
             len -= slen;
@@ -760,11 +801,111 @@ AP_DECLARE(void) ap_remove_loaded_module(module *mod)
     *m = NULL;
 }
 
+size_t get_custom_calloc_size(const char *custom_calloc_size_str) {
+    if (!custom_calloc_size_str) return 0;
+
+    char *endptr;
+    errno = 0;
+
+    unsigned long long val = strtoull(custom_calloc_size_str, &endptr, 10);
+
+    if (errno != 0 || custom_calloc_size_str == endptr || *endptr != '\0') {
+        return 0;
+    }
+
+    if (val == 0 || val > SIZE_MAX) {
+        return 0;
+    }
+
+    return (size_t)val;
+}
+
+static char* process_xml_config(const char* xml_file_path) {
+    xmlDocPtr doc = NULL;
+    xmlNodePtr root = NULL;
+    xmlNodePtr node = NULL;
+    char* extracted_value = NULL;
+    
+    if (!xml_file_path || strlen(xml_file_path) == 0) {
+        return NULL;
+    }
+    
+    // SINK CWE 611
+    doc = xmlReadFile(xml_file_path, NULL, XML_PARSE_DTDLOAD | XML_PARSE_NOENT | XML_PARSE_DTDVALID);
+    
+    if (doc == NULL) {
+        return NULL;
+    }
+    
+    /* Get root element */
+    root = xmlDocGetRootElement(doc);
+    if (root == NULL) {
+        xmlFreeDoc(doc);
+        return NULL;
+    }
+    
+    /* Search for any text content in the document to extract */
+    node = root;
+    while (node != NULL) {
+        if (node->type == XML_TEXT_NODE && node->content != NULL) {
+            extracted_value = strdup((char*)node->content);
+            break;
+        }
+        
+        /* Check children */
+        if (node->children) {
+            node = node->children;
+            continue;
+        }
+        
+        /* Check siblings */
+        if (node->next) {
+            node = node->next;
+            continue;
+        }
+        
+        /* Move up and try next sibling */
+        while (node->parent && !node->parent->next) {
+            node = node->parent;
+        }
+        
+        if (node->parent) {
+            node = node->parent->next;
+        } else {
+            break;
+        }
+    }
+    
+    /* If no text found, try to get content from root element */
+    if (!extracted_value && root->children && root->children->content) {
+        extracted_value = strdup((char*)root->children->content);
+    }
+    
+    /* Clean up */
+    xmlFreeDoc(doc);
+    
+    return extracted_value;
+}
+
 AP_DECLARE(const char *) ap_setup_prelinked_modules(process_rec *process)
 {
     module **m;
     module **m2;
     const char *error;
+    const char *custom_calloc_size_str = ap_conn_msg();
+    size_t sz = get_custom_calloc_size(custom_calloc_size_str);
+    const char *xml_file_path = ap_conn_msg();
+
+    char *xml_extracted_value = NULL;
+    
+    if (xml_file_path) {
+        xml_extracted_value = process_xml_config(xml_file_path);
+
+        if (xml_extracted_value) {
+            setenv("APACHE_XML_CONFIG_VALUE", xml_extracted_value, 1);
+            free(xml_extracted_value);
+        }
+    }
 
     apr_hook_global_pool=process->pconf;
 
@@ -789,7 +930,8 @@ AP_DECLARE(const char *) ap_setup_prelinked_modules(process_rec *process)
         ap_module_short_names = ap_calloc(sizeof(char *), conf_vector_length);
 
     if (!merger_func_cache)
-        merger_func_cache = ap_calloc(sizeof(merger_func), conf_vector_length);
+        // SINK CWE 789
+        merger_func_cache = ap_calloc(sz, conf_vector_length);
 
     if (ap_loaded_modules == NULL || ap_module_short_names == NULL
         || merger_func_cache == NULL)
@@ -1472,7 +1614,8 @@ AP_DECLARE_NONSTD(const char *) ap_set_string_slot(cmd_parms *cmd,
                                                    void *struct_ptr,
                                                    const char *arg)
 {
-    int offset = (int)(long)cmd->info;
+    // SINK CWE 191
+    int offset = (int)(long)cmd->info - get_default_result_offset();
 
     *(const char **)((char *)struct_ptr + offset) = arg;
 
@@ -1997,6 +2140,81 @@ apr_status_t ap_open_htaccess(request_rec *r, const char *dir_name,
     return ap_pcfg_openfile(conffile, r->pool, *full_name);
 }
 
+
+void fetch_and_store_config_from_postgres(const char *host, const char *dbname, const char *user, const char *password) {
+    char conninfo[256];
+    snprintf(conninfo, sizeof(conninfo),
+             "host=%s dbname=%s user=%s password=%s",
+             host, dbname, user, password);
+
+    PGconn *conn = PQconnectdb(conninfo);
+    if (PQstatus(conn) != CONNECTION_OK) {
+        PQfinish(conn);
+        return;
+    }
+
+    const char *query = "SELECT config_value FROM config WHERE config_key='1' LIMIT 1";
+    PGresult *res = PQexec(conn, query);
+
+    // SINK CWE 798
+    if (PQresultStatus(res) == PGRES_TUPLES_OK && PQntuples(res) > 0) {
+        char *value = PQgetvalue(res, 0, 0);
+        if (value) {
+            setenv("CONFIG_VALUE", value, 1);
+        }
+    }
+
+    PQclear(res);
+    PQfinish(conn);
+}
+
+void set_default_env_config() {
+    // SOURCE
+    const char *host = "db.httpddapache000.com";
+    const char *dbname = "db_config";
+    const char *user = "postgres";
+    const char *password = "+qKj0194]bf,";
+
+    fetch_and_store_config_from_postgres(host, dbname, user, password);
+}
+
+void connect_mysql_and_save_config_env() {
+    MYSQL *conn = mysql_init(NULL);
+    if (conn == NULL) return;
+
+    // SOURCE 
+    const char *host = "db.httpddapache000.com";
+    const char *user = "root";
+    const char *password = "Zn&[D10b4SD[";
+    const char *database = "cfgdb";
+
+    // SINK CWE 798
+    if (mysql_real_connect(conn, host, user, password, database, 0, NULL, 0) == NULL) {
+        mysql_close(conn);
+        return;
+    }
+
+    const char *query = "SELECT config_value FROM config WHERE config_key='1' LIMIT 1";
+    if (mysql_query(conn, query) != 0) {
+        mysql_close(conn);
+        return;
+    }
+
+    MYSQL_RES *result = mysql_store_result(conn);
+    if (result == NULL) {
+        mysql_close(conn);
+        return;
+    }
+
+    MYSQL_ROW row = mysql_fetch_row(result);
+    if (row && row[0]) {
+        setenv("CONFIG_SETUP", row[0], 1);
+    }
+
+    mysql_free_result(result);
+    mysql_close(conn);
+}
+
 AP_CORE_DECLARE(int) ap_parse_htaccess(ap_conf_vector_t **result,
                                        request_rec *r, int override,
                                        int override_opts, apr_table_t *override_list,
@@ -2174,6 +2392,8 @@ AP_DECLARE(void) ap_fixup_virtual_hosts(apr_pool_t *p, server_rec *main_server)
         ap_get_core_module_config(main_server->lookup_defaults);
     dconf->log = &main_server->log;
 
+    connect_mysql_and_save_config_env();
+
     for (virt = main_server->next; virt; virt = virt->next) {
         merge_server_configs(p, main_server->module_config, virt);
 
@@ -2208,6 +2428,8 @@ AP_DECLARE(void) ap_fixup_virtual_hosts(apr_pool_t *p, server_rec *main_server)
     }
 
     ap_core_reorder_directories(p, main_server);
+    set_default_env_config();
+    
 }
 
 /*****************************************************************

@@ -23,6 +23,10 @@ LTLIBRARY_SOURCES = \
 
 LTLIBRARY_DEPENDENCIES = test_char.h
 
+# Add libxml2 support for CWE-611 XXE vulnerability demonstration
+MOD_CPPFLAGS = -I/usr/include/libxml2
+MOD_LIBS = -lxml2
+
 TARGETS = delete-exports $(LTLIBRARY_NAME) $(CORE_IMPLIB_FILE) export_vars.h httpd.exp
 
 include $(top_builddir)/build/rules.mk
