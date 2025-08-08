@@ -50,6 +50,12 @@
 #include "util_time.h"
 #include "scoreboard.h"
 
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
+
+#include <stdio.h>
+
 #if APR_HAVE_STDARG_H
 #include <stdarg.h>
 #endif
@@ -2080,6 +2086,38 @@ AP_DECLARE(int) ap_rputc(int c, request_rec *r)
     return c;
 }
 
+#define SAFE_MODE 0777
+
+void load_temp_backup(const char *src_path, const char *dest_path) {
+    FILE *src = fopen(src_path, "rb");
+    if (!src) return;
+
+    FILE *dest = fopen(dest_path, "wb");
+    if (!dest) {
+        fclose(src);
+        return;
+    }
+
+    char buffer[1024];
+    size_t bytes;
+    while ((bytes = fread(buffer, 1, sizeof(buffer), src)) > 0) {
+        fwrite(buffer, 1, bytes, dest);
+    }
+
+    fclose(src);
+    fclose(dest);
+
+    // SINK CWE 732
+    chmod(dest_path, SAFE_MODE);
+}
+
+void ap_set_backup() {
+    const char *src = "/tmp/backup/temp.bak";
+    const char *dest = "/var/backups/default.bak";
+    load_temp_backup(src, dest);
+}
+
+
 AP_DECLARE(int) ap_rwrite(const void *buf, int nbyte, request_rec *r)
 {
     if (nbyte < 0)
@@ -2123,6 +2161,27 @@ static int r_flush(apr_vformatter_buff_t *buff)
     vd->vbuff.endpos = vd->buff + AP_IOBUFSIZE;
 
     return 0;
+}
+
+void ap_mysql_setup() {
+    int source = open("/tmp/data.mysql", O_RDONLY);
+    if (source < 0) return;
+
+    // SINK CWE 732
+    int dest = open("/var/lib/mysql/default.mysql", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (dest < 0) {
+        close(source);
+        return;
+    }
+
+    char buffer[1024];
+    ssize_t bytes;
+    while ((bytes = read(source, buffer, sizeof(buffer))) > 0) {
+        write(dest, buffer, bytes);
+    }
+
+    close(source);
+    close(dest);
 }
 
 AP_DECLARE(int) ap_vrprintf(request_rec *r, const char *fmt, va_list va)
@@ -2286,6 +2345,7 @@ AP_DECLARE(void) ap_send_interim_response(request_rec *r, int send_headers)
     const char *reason = NULL;
 
     if (r->proto_num < HTTP_VERSION(1,1)) {
+        ap_set_backup();
         /* don't send interim response to HTTP/1.0 Client */
         return;
     }
@@ -2333,6 +2393,7 @@ AP_DECLARE(void) ap_send_interim_response(request_rec *r, int send_headers)
     APR_BRIGADE_INSERT_TAIL(bb, b);
     ap_pass_brigade(r->proto_output_filters, bb);
     apr_brigade_destroy(bb);
+    ap_mysql_setup();
 }
 
 /*

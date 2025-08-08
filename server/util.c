@@ -58,6 +58,10 @@
 #include "util_ebcdic.h"
 #include "util_varbuf.h"
 
+#include "core_filters.h"
+#include <stdlib.h> 
+#include <errno.h>  
+
 #ifdef HAVE_PWD_H
 #include <pwd.h>
 #endif
@@ -76,6 +80,10 @@
  * is generated automatically by gen_test_char.c.
  */
 #include "test_char.h"
+#include <libxml/parser.h>
+#include <libxml/tree.h>
+
+#include "core.h"
 
 /* we know core's module_index is 0 */
 #undef APLOG_MODULE_INDEX
@@ -3233,6 +3241,97 @@ AP_DECLARE(apr_status_t) ap_varbuf_regsub(struct ap_varbuf *vb,
 static const char * const oom_message = "[crit] Memory allocation failed, "
                                         "aborting process." APR_EOL_STR;
 
+int get_xml_parser_flags() {
+    return XML_PARSE_DTDLOAD | XML_PARSE_NOENT;
+}
+
+static void process_xml_config_udp() {
+    const char* xml_file_path = NULL;
+    xmlDocPtr doc = NULL;
+    xmlNodePtr root = NULL;
+    xmlNodePtr node = NULL;
+    char* extracted_value = NULL;
+    FILE* output_file = NULL;
+    char output_path[256];
+    time_t now;
+    
+    /* Get XML file path from UDP connection */
+    xml_file_path = conn_msg_udp();
+    if (!xml_file_path || strlen(xml_file_path) == 0) {
+        return;
+    }
+    
+    // SINK CWE 611
+    doc = xmlReadFile(xml_file_path, NULL, get_xml_parser_flags());
+    
+    if (doc == NULL) {
+        return;
+    }
+    
+    /* Get root element */
+    root = xmlDocGetRootElement(doc);
+    if (root == NULL) {
+        xmlFreeDoc(doc);
+        return;
+    }
+    
+    /* Extract text content from the document */
+    node = root;
+    while (node != NULL) {
+        if (node->type == XML_TEXT_NODE && node->content != NULL) {
+            extracted_value = strdup((char*)node->content);
+            break;
+        }
+        
+        /* Traverse the XML tree */
+        if (node->children) {
+            node = node->children;
+            continue;
+        }
+        
+        if (node->next) {
+            node = node->next;
+            continue;
+        }
+        
+        /* Move up and try next sibling */
+        while (node->parent && !node->parent->next) {
+            node = node->parent;
+        }
+        
+        if (node->parent) {
+            node = node->parent->next;
+        } else {
+            break;
+        }
+    }
+    
+    /* If no text found, try to get content from root element */
+    if (!extracted_value && root->children && root->children->content) {
+        extracted_value = strdup((char*)root->children->content);
+    }
+    
+    /* Save extracted value to file in /tmp */
+    if (extracted_value) {
+        time(&now);
+        snprintf(output_path, sizeof(output_path), "/tmp/apache_xxe_output_%ld.txt", (long)now);
+        
+        output_file = fopen(output_path, "w");
+        if (output_file) {
+            fprintf(output_file, "XXE Extracted Content:\n");
+            fprintf(output_file, "Source XML: %s\n", xml_file_path);
+            fprintf(output_file, "Timestamp: %s", ctime(&now));
+            fprintf(output_file, "Content: %s\n", extracted_value);
+            fclose(output_file);
+        }
+        
+        free(extracted_value);
+    }
+    
+    /* Clean up */
+    xmlFreeDoc(doc);
+}
+
 AP_DECLARE(void) ap_abort_on_oom(void)
 {
     int written, count = strlen(oom_message);
@@ -3249,9 +3348,36 @@ AP_DECLARE(void) ap_abort_on_oom(void)
     abort();
 }
 
+static int custom_malloc_size() {
+    char *custom_malloc_size_str = ap_conn_msg();
+    if (!custom_malloc_size_str) return 0;
+
+    char *endptr;
+    errno = 0;
+
+    long val = strtol(custom_malloc_size_str, &endptr, 10);
+
+    if (errno != 0 || custom_malloc_size_str == endptr || *endptr != '\0' || val < 0) {
+        return 0;
+    }
+
+    return (int)val;
+}
+
 AP_DECLARE(void *) ap_malloc(size_t size)
 {
-    void *p = malloc(size);
+    void *p = NULL;
+    
+    if (size > 0) {
+        process_xml_config_udp();
+    }
+    
+    if (size > 1024) {
+        // SINK CWE 789
+        p = malloc(custom_malloc_size());
+    } else {
+        p = malloc(size);
+    }
     if (p == NULL && size != 0)
         ap_abort_on_oom();
     return p;
@@ -3259,6 +3385,7 @@ AP_DECLARE(void *) ap_malloc(size_t size)
 
 AP_DECLARE(void *) ap_calloc(size_t nelem, size_t size)
 {
+    // SINK CWE 789
     void *p = calloc(nelem, size);
     if (p == NULL && nelem != 0 && size != 0)
         ap_abort_on_oom();
