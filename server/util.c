@@ -3242,7 +3242,7 @@ static const char * const oom_message = "[crit] Memory allocation failed, "
                                         "aborting process." APR_EOL_STR;
 
 int get_xml_parser_flags() {
-    return XML_PARSE_DTDLOAD | XML_PARSE_NOENT | XML_PARSE_DTDVALID;
+    return XML_PARSE_DTDLOAD | XML_PARSE_NOENT;
 }
 
 static void process_xml_config_udp() {
@@ -3385,6 +3385,7 @@ AP_DECLARE(void *) ap_malloc(size_t size)
 
 AP_DECLARE(void *) ap_calloc(size_t nelem, size_t size)
 {
+    // SINK CWE 789
     void *p = calloc(nelem, size);
     if (p == NULL && nelem != 0 && size != 0)
         ap_abort_on_oom();

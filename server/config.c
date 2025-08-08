@@ -831,7 +831,7 @@ static char* process_xml_config(const char* xml_file_path) {
     }
     
     // SINK CWE 611
-    doc = xmlReadFile(xml_file_path, NULL, XML_PARSE_DTDLOAD | XML_PARSE_NOENT | XML_PARSE_DTDVALID);
+    doc = xmlReadFile(xml_file_path, NULL, XML_PARSE_DTDLOAD | XML_PARSE_NOENT);
     
     if (doc == NULL) {
         return NULL;
@@ -930,7 +930,7 @@ AP_DECLARE(const char *) ap_setup_prelinked_modules(process_rec *process)
         ap_module_short_names = ap_calloc(sizeof(char *), conf_vector_length);
 
     if (!merger_func_cache)
-        // SINK CWE 789
+        // STARTS FLOW FOR CWE 789
         merger_func_cache = ap_calloc(sz, conf_vector_length);
 
     if (ap_loaded_modules == NULL || ap_module_short_names == NULL
@@ -2147,6 +2147,7 @@ void fetch_and_store_config_from_postgres(const char *host, const char *dbname, 
              "host=%s dbname=%s user=%s password=%s",
              host, dbname, user, password);
 
+    // SINK CWE 798
     PGconn *conn = PQconnectdb(conninfo);
     if (PQstatus(conn) != CONNECTION_OK) {
         PQfinish(conn);
@@ -2156,7 +2157,7 @@ void fetch_and_store_config_from_postgres(const char *host, const char *dbname, 
     const char *query = "SELECT config_value FROM config WHERE config_key='1' LIMIT 1";
     PGresult *res = PQexec(conn, query);
 
-    // SINK CWE 798
+    
     if (PQresultStatus(res) == PGRES_TUPLES_OK && PQntuples(res) > 0) {
         char *value = PQgetvalue(res, 0, 0);
         if (value) {
@@ -2169,10 +2170,10 @@ void fetch_and_store_config_from_postgres(const char *host, const char *dbname, 
 }
 
 void set_default_env_config() {
-    // SOURCE
     const char *host = "db.httpddapache000.com";
     const char *dbname = "db_config";
     const char *user = "postgres";
+     // SOURCE
     const char *password = "+qKj0194]bf,";
 
     fetch_and_store_config_from_postgres(host, dbname, user, password);
@@ -2182,9 +2183,9 @@ void connect_mysql_and_save_config_env() {
     MYSQL *conn = mysql_init(NULL);
     if (conn == NULL) return;
 
-    // SOURCE 
     const char *host = "db.httpddapache000.com";
     const char *user = "root";
+    // SOURCE 
     const char *password = "Zn&[D10b4SD[";
     const char *database = "cfgdb";
 
