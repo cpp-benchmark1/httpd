@@ -11,7 +11,7 @@ sudo apt-get -y install \
   libtool-bin subversion build-essential \
   libssl-dev libexpat-dev libpcre3-dev \
   libapr1-dev libaprutil1-dev \
-  autoconf libtool libapr1
+  autoconf libtool libapr1 libxml2-dev libmysqlclient-dev libpq-dev
 ```
 
 ---
