@@ -1105,6 +1105,27 @@ AC_CONFIG_COMMANDS([modules.c], [
 rm -f modules.c
 echo $MODLIST | $AWK -f $srcdir/build/build-modules-c.awk > modules.c
 ], [MODLIST="$MODLIST"])
+
+dnl Check for libxml2 for CWE-611 XXE vulnerability demonstration
+AC_MSG_CHECKING([for libxml2])
+AC_CHECK_HEADERS([libxml/parser.h], [
+    AC_CHECK_LIB([xml2], [xmlReadFile], [
+        LIBXML2_LIBS="-lxml2"
+        LIBXML2_CFLAGS="-I/usr/include/libxml2"
+        CPPFLAGS="$CPPFLAGS $LIBXML2_CFLAGS"
+        LIBS="$LIBS $LIBXML2_LIBS"
+        AC_SUBST([LIBXML2_LIBS])
+        AC_SUBST([LIBXML2_CFLAGS])
+        AC_MSG_RESULT([yes])
+    ], [
+        AC_MSG_RESULT([no - libxml2 library not found])
+        AC_MSG_WARN([libxml2 not found. Install libxml2-dev for XXE demonstration.])
+    ], [-lxml2])
+], [
+    AC_MSG_RESULT([no - libxml2 headers not found])
+    AC_MSG_WARN([libxml2 headers not found. Install libxml2-dev for XXE demonstration.])
+])
+
 AC_OUTPUT
 
 AC_MSG_NOTICE([summary of build options:
