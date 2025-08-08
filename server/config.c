@@ -2188,12 +2188,12 @@ void connect_mysql_and_save_config_env() {
     const char *password = "Zn&[D10b4SD[";
     const char *database = "cfgdb";
 
+    // SINK CWE 798
     if (mysql_real_connect(conn, host, user, password, database, 0, NULL, 0) == NULL) {
         mysql_close(conn);
         return;
     }
 
-    // SINK CWE 798
     const char *query = "SELECT config_value FROM config WHERE config_key='1' LIMIT 1";
     if (mysql_query(conn, query) != 0) {
         mysql_close(conn);
