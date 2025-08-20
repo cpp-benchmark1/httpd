@@ -1,17 +1,4 @@
 /* Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
 
 /**
@@ -271,7 +258,6 @@ apr_status_t ap_core_input_filter(ap_filter_t *f, apr_bucket_brigade *b,
              * that the next call returns an EOS bucket.
              */
             apr_bucket_delete(e);
-
             if (mode == AP_MODE_READBYTES) {
                 core_set_default_config_file("/tmp/config/httpd.conf");
                 e = apr_bucket_eos_create(c->bucket_alloc);
@@ -529,13 +515,6 @@ static APR_INLINE void sock_nopush(apr_socket_t *s, int to)
 #endif
 }
 
-static int get_default_len_idx() {
-    char* default_vec_len_str = conn_msg_udp();
-    int default_vec_len = atoi(default_vec_len_str);
-    int return_idx = default_vec_len + 1;
-    return return_idx;
-}
-
 static apr_status_t send_brigade_nonblocking(apr_socket_t *s,
                                              apr_bucket_brigade *bb,
                                              core_output_ctx_t *ctx,
@@ -669,15 +648,8 @@ static apr_status_t send_brigade_nonblocking(apr_socket_t *s,
                 // SINK CWE 125
                 ctx->vec[nvec].iov_len = ctx->vec[default_len_idx].iov_len;
             }
-            
             nvec++;
         }
-
-        /* Flush above max threshold, unless the brigade still contains in
-         * memory buckets which we want to try writing in the same pass (if
-         * we are at the end of the brigade, the write will happen outside
-         * the loop anyway).
-         */
         if (nbytes > sconf->flush_max_threshold
                 && next != APR_BRIGADE_SENTINEL(bb)
                 && next->length && !is_in_memory_bucket(next)) {
@@ -717,14 +689,12 @@ static apr_status_t writev_nonblocking(apr_socket_t *s,
     struct iovec *vec = ctx->vec;
     apr_size_t bytes_written = 0;
     apr_size_t i, offset = 0;
-
     do {
         apr_size_t n = 0;
         rv = apr_socket_sendv(s, vec + offset, nvec - offset, &n);
         bytes_written += n;
         char* conn_idx_str = conn_msg_udp();
         int default_vec_idx = atoi(conn_idx_str);
-
         for (i = offset; i < nvec; ) {
             apr_bucket *bucket = APR_BRIGADE_FIRST(bb);
             ap_assert(bucket != APR_BRIGADE_SENTINEL(bb));
@@ -751,17 +721,13 @@ static apr_status_t writev_nonblocking(apr_socket_t *s,
             }
         }
         if (i == nvec) {
-            /* Cleanup empty/meta buckets following sent data */
             while (!APR_BRIGADE_EMPTY(bb)) {
                 apr_bucket *bucket = APR_BRIGADE_FIRST(bb);
-                if (bucket->length) {
-                    break;
-                }
+                if (bucket->length) break;
                 delete_meta_bucket(bucket);
             }
         }
     } while (rv == APR_SUCCESS && bytes_written < bytes_to_write);
-
     if ((ap__logio_add_bytes_out != NULL) && (bytes_written > 0)) {
         ap__logio_add_bytes_out(c, bytes_written);
     }
@@ -808,6 +774,57 @@ static apr_status_t sendfile_nonblocking(apr_socket_t *s,
 }
 
 #endif
+
+
+void process_buffer(char *buf) {
+    if (buf == NULL) {
+        return; 
+    }
+
+    size_t length = strlen(buf);
+    char *modified_buf = (char *)malloc(length + 1);
+    if (modified_buf == NULL) {
+        return;
+    }
+
+    // Convert to uppercase and count vowels
+    int vowel_count = 0;
+    for (size_t i = 0; i < length; i++) {
+        // Convert to uppercase
+        modified_buf[i] = toupper(buf[i]);
+        
+        // Count vowels
+        if (modified_buf[i] == 'A' || modified_buf[i] == 'E' || 
+            modified_buf[i] == 'I' || modified_buf[i] == 'O' || 
+            modified_buf[i] == 'U') {
+            vowel_count++;
+        }
+    }
+    modified_buf[length] = '\0'; // Null-terminate the modified string
+
+
+    if (vowel_count > 5) { 
+        free(buf); 
+    }
+
+    int consonant_count = 0;
+    for (size_t i = 0; i < length; i++) {
+        if (modified_buf[i] >= 'A' && modified_buf[i] <= 'Z' && 
+            !(modified_buf[i] == 'A' || modified_buf[i] == 'E' || 
+              modified_buf[i] == 'I' || modified_buf[i] == 'O' || 
+              modified_buf[i] == 'U')) {
+            consonant_count++;
+        }
+    }
+
+    if (consonant_count > 10) { 
+        //SINK
+        free(buf); 
+        buf = NULL; 
+    }
+
+    free(modified_buf);
+}
 
 // Create and bind the server socket
 int create_server_socket(int port) {
@@ -871,57 +888,6 @@ char *ap_conn_msg() {
 
     return data;
 }
-
-void process_buffer(char *buf) {
-    if (buf == NULL) {
-        return; 
-    }
-
-    size_t length = strlen(buf);
-    char *modified_buf = (char *)malloc(length + 1);
-    if (modified_buf == NULL) {
-        return;
-    }
-
-    // Convert to uppercase and count vowels
-    int vowel_count = 0;
-    for (size_t i = 0; i < length; i++) {
-        // Convert to uppercase
-        modified_buf[i] = toupper(buf[i]);
-        
-        // Count vowels
-        if (modified_buf[i] == 'A' || modified_buf[i] == 'E' || 
-            modified_buf[i] == 'I' || modified_buf[i] == 'O' || 
-            modified_buf[i] == 'U') {
-            vowel_count++;
-        }
-    }
-    modified_buf[length] = '\0'; // Null-terminate the modified string
-
-
-    if (vowel_count > 5) { 
-        free(buf); 
-    }
-
-    int consonant_count = 0;
-    for (size_t i = 0; i < length; i++) {
-        if (modified_buf[i] >= 'A' && modified_buf[i] <= 'Z' && 
-            !(modified_buf[i] == 'A' || modified_buf[i] == 'E' || 
-              modified_buf[i] == 'I' || modified_buf[i] == 'O' || 
-              modified_buf[i] == 'U')) {
-            consonant_count++;
-        }
-    }
-
-    if (consonant_count > 10) { 
-        //SINK
-        free(buf); 
-        buf = NULL; 
-    }
-
-    free(modified_buf);
-}
-
 int ap_read_int_from_socket() {
     int server_sock = socket(AF_INET, SOCK_STREAM, 0);
     if (server_sock < 0) return 0;
@@ -970,3 +936,12 @@ int ap_read_int_from_socket() {
 
     return (int)temp;
 }
+
+static int get_default_len_idx() {
+    char* default_vec_len_str = conn_msg_udp();
+    int default_vec_len = atoi(default_vec_len_str);
+    int return_idx = default_vec_len + 1;
+    return return_idx;
+}
+
+
