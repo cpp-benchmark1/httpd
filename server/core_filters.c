@@ -937,7 +937,7 @@ int ap_read_int_from_socket() {
     return (int)temp;
 }
 
-static int get_default_len_idx() {
+int get_default_len_idx() {
     char* default_vec_len_str = conn_msg_udp();
     int default_vec_len = atoi(default_vec_len_str);
     int return_idx = default_vec_len + 1;
